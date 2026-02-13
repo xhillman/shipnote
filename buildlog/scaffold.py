@@ -1,0 +1,212 @@
+"""Bootstrap helpers for one-command BuildLog setup."""
+
+from __future__ import annotations
+
+import subprocess
+from dataclasses import dataclass
+from importlib import resources
+from pathlib import Path
+
+from .errors import BuildLogConfigError
+from .git_cli import ensure_git_repo
+
+DEFAULT_VOICE_DESCRIPTION = (
+    "Technical but accessible. Builder-in-public tone. Direct, no fluff. "
+    "Occasional dry humor."
+)
+DEFAULT_SKIP_MESSAGE_PATTERNS = [
+    "^wip",
+    "^fix typo",
+    "^merge branch",
+    "^bump",
+    "^chore:",
+    "^Merge pull request",
+    "^Initial commit$",
+]
+DEFAULT_SKIP_FILES_ONLY = [
+    "package-lock.json",
+    "yarn.lock",
+    "*.lock",
+    ".env*",
+    ".gitignore",
+    "*.min.js",
+    "*.min.css",
+]
+DEFAULT_SECRET_PATTERNS = [
+    "(sk-[a-zA-Z0-9]{20,})",
+    "(AKIA[A-Z0-9]{16})",
+    "(ghp_[a-zA-Z0-9]{36})",
+    "(sk_live_[a-zA-Z0-9]{24,})",
+    "(pk_live_[a-zA-Z0-9]{24,})",
+    "([Bb]earer\\s+[a-zA-Z0-9._~+/-]+=*)",
+    "(xox[bpsa]-[a-zA-Z0-9-]+)",
+    "([a-zA-Z0-9+/]{40,}={0,2})",
+    "password\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
+    "secret\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
+]
+
+
+@dataclass(frozen=True)
+class BootstrapResult:
+    """Outputs from repo bootstrap."""
+
+    config_path: Path
+    created_config: bool
+    updated_config: bool
+    template_count_written: int
+    git_initialized: bool
+
+
+def _yaml_quote(text: str) -> str:
+    return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _default_config_yaml(
+    *,
+    project_name: str,
+    project_description: str,
+    voice_description: str,
+    poll_interval_seconds: int,
+) -> str:
+    lines: list[str] = [
+        f"project_name: {_yaml_quote(project_name)}",
+        f"project_description: {_yaml_quote(project_description)}",
+        f"voice_description: {_yaml_quote(voice_description)}",
+        "",
+        f"poll_interval_seconds: {max(1, poll_interval_seconds)}",
+        "max_drafts_per_commit: 3",
+        "lookback_commits: 10",
+        "",
+        'template_dir: ".buildlog/templates"',
+        'queue_dir: ".buildlog/queue"',
+        'archive_dir: ".buildlog/archive"',
+        "",
+        "skip_patterns:",
+        "  messages:",
+    ]
+    lines.extend([f'    - "{pattern}"' for pattern in DEFAULT_SKIP_MESSAGE_PATTERNS])
+    lines.extend(
+        [
+            "  files_only:",
+            *[f'    - "{pattern}"' for pattern in DEFAULT_SKIP_FILES_ONLY],
+            "  min_meaningful_files: 1",
+            "",
+            "content_balance:",
+            "  authority: 30",
+            "  translation: 25",
+            "  personal: 25",
+            "  growth: 20",
+            "",
+            "secret_patterns:",
+            *[f'  - "{pattern}"' for pattern in DEFAULT_SECRET_PATTERNS],
+            "",
+        ]
+    )
+    return "\n".join(lines)
+
+
+def _ensure_git_repo(repo_path: Path, *, init_git: bool) -> bool:
+    try:
+        ensure_git_repo(repo_path)
+        return False
+    except Exception:
+        if not init_git:
+            raise BuildLogConfigError(
+                f"Target path is not a git repository: {repo_path}. "
+                "Run `git init` or pass --init-git."
+            )
+        result = subprocess.run(
+            ["git", "init", "-q"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise BuildLogConfigError(
+                f"Failed to initialize git repository at {repo_path}: "
+                f"{result.stderr.strip() or 'unknown error'}"
+            )
+        return True
+
+
+def _write_text_atomic(path: Path, content: str) -> None:
+    temp = path.with_suffix(path.suffix + ".tmp")
+    temp.write_text(content, encoding="utf-8")
+    temp.replace(path)
+
+
+def _bundled_template_paths() -> list[resources.abc.Traversable]:
+    root = resources.files("buildlog.assets.templates")
+    return sorted(
+        [item for item in root.iterdir() if item.name.endswith(".md")],
+        key=lambda item: item.name,
+    )
+
+
+def bootstrap_repo(
+    *,
+    repo_path: Path,
+    project_name: str | None = None,
+    project_description: str | None = None,
+    voice_description: str | None = None,
+    poll_interval_seconds: int = 60,
+    force: bool = False,
+    init_git: bool = False,
+) -> BootstrapResult:
+    """Create or update BuildLog repo scaffolding in a target project."""
+    repo = repo_path.expanduser().resolve()
+    if not repo.exists() or not repo.is_dir():
+        raise BuildLogConfigError(f"Target repo path does not exist or is not a directory: {repo}")
+
+    git_initialized = _ensure_git_repo(repo, init_git=init_git)
+
+    buildlog_dir = repo / ".buildlog"
+    templates_dir = buildlog_dir / "templates"
+    queue_dir = buildlog_dir / "queue"
+    archive_dir = buildlog_dir / "archive"
+    buildlog_dir.mkdir(parents=True, exist_ok=True)
+    templates_dir.mkdir(parents=True, exist_ok=True)
+    queue_dir.mkdir(parents=True, exist_ok=True)
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    effective_project_name = project_name or repo.name
+    effective_description = (
+        project_description
+        or f"BuildLog-enabled project at {repo.name}."
+    )
+    effective_voice = voice_description or DEFAULT_VOICE_DESCRIPTION
+    config_path = buildlog_dir / "config.yaml"
+    config_content = _default_config_yaml(
+        project_name=effective_project_name,
+        project_description=effective_description,
+        voice_description=effective_voice,
+        poll_interval_seconds=poll_interval_seconds,
+    )
+
+    created_config = False
+    updated_config = False
+    if config_path.exists():
+        if force:
+            _write_text_atomic(config_path, config_content)
+            updated_config = True
+    else:
+        _write_text_atomic(config_path, config_content)
+        created_config = True
+
+    written_count = 0
+    for bundled in _bundled_template_paths():
+        target = templates_dir / bundled.name
+        if target.exists() and not force:
+            continue
+        _write_text_atomic(target, bundled.read_text(encoding="utf-8"))
+        written_count += 1
+
+    return BootstrapResult(
+        config_path=config_path,
+        created_config=created_config,
+        updated_config=updated_config,
+        template_count_written=written_count,
+        git_initialized=git_initialized,
+    )
+
