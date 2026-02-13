@@ -1,4 +1,4 @@
-"""stderr logger helpers for BuildLog."""
+"""stderr logger helpers for Shipnote."""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ def utc_timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-class BuildLogLogger:
+class ShipnoteLogger:
     """Simple structured logger writing to stderr only."""
 
     def _emit(self, level: str, message: str) -> None:
-        print(f"[BUILDLOG {utc_timestamp()}] {level}: {message}", file=sys.stderr, flush=True)
+        print(f"[SHIPNOTE {utc_timestamp()}] {level}: {message}", file=sys.stderr, flush=True)
 
     def info(self, message: str) -> None:
         self._emit("INFO", message)
@@ -27,5 +27,5 @@ class BuildLogLogger:
         self._emit("ERROR", message)
 
 
-LOGGER = BuildLogLogger()
+LOGGER = ShipnoteLogger()
 

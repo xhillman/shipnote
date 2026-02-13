@@ -4,7 +4,7 @@ Shipnote turns meaningful git commits into queued, reviewable build-in-public dr
 
 It runs locally, monitors one repository at a time, and writes markdown drafts to:
 
-- `.buildlog/queue`
+- `.shipnote/queue`
 
 Shipnote never auto-posts.
 
@@ -19,15 +19,15 @@ pipx install shipnote
 1. Add secrets:
 
 ```bash
-mkdir -p ~/.buildlog
-chmod 700 ~/.buildlog
-cat > ~/.buildlog/secrets.env <<'ENV'
+mkdir -p ~/.shipnote
+chmod 700 ~/.shipnote
+cat > ~/.shipnote/secrets.env <<'ENV'
 OPENAI_API_KEY=...
 # or ANTHROPIC_API_KEY=...
 # optional:
 # AXIS_DEFAULT_MODEL=claude-sonnet-4-5-20250929
 ENV
-chmod 600 ~/.buildlog/secrets.env
+chmod 600 ~/.shipnote/secrets.env
 ```
 
 2. In any project repo:
@@ -47,10 +47,10 @@ shipnote launch --repo . --init-git
 ```bash
 shipnote init --repo .
 shipnote launch --repo .
-shipnote check --config .buildlog/config.yaml
-shipnote status --config .buildlog/config.yaml
-shipnote ask --config .buildlog/config.yaml "what's in queue?"
-shipnote chat --config .buildlog/config.yaml
+shipnote check --config .shipnote/config.yaml
+shipnote status --config .shipnote/config.yaml
+shipnote ask --config .shipnote/config.yaml "what's in queue?"
+shipnote chat --config .shipnote/config.yaml
 ```
 
 ## Development

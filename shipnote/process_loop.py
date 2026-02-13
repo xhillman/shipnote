@@ -10,7 +10,7 @@ from typing import Any
 from .config_loader import RepoConfig, ensure_runtime_dirs, load_repo_config, load_secrets
 from .context_builder import build_context
 from .daemon_runtime import clear_daemon_status, write_daemon_status
-from .errors import BuildLogGitError
+from .errors import ShipnoteGitError
 from .git_cli import (
     CommitInfo,
     ensure_git_repo,
@@ -50,8 +50,8 @@ def _mark_commit_processed(st_path: Path, state: dict[str, Any], commit: CommitI
     save_state(st_path, state)
 
 
-def _runtime_lock_path(buildlog_dir: Path) -> Path:
-    return buildlog_dir / "runtime.lock"
+def _runtime_lock_path(shipnote_dir: Path) -> Path:
+    return shipnote_dir / "runtime.lock"
 
 
 def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> int:
@@ -68,7 +68,7 @@ def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> i
         LOGGER.warn("Repository has no commits yet.")
         return 0
 
-    st_path = state_path(repo_cfg.buildlog_dir)
+    st_path = state_path(repo_cfg.shipnote_dir)
     had_state_file = st_path.exists()
     state, recovered, rolled_over = load_state(st_path)
     if recovered:
@@ -90,12 +90,12 @@ def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> i
 
     try:
         commits = list_new_commits(repo_cfg.repo_root, state.get("last_commit_sha"))
-    except BuildLogGitError as exc:
+    except ShipnoteGitError as exc:
         if "not in current history" in str(exc):
             LOGGER.warn("last_commit_sha not present in history; resetting baseline to current HEAD.")
             try:
                 commits = list_new_commits(repo_cfg.repo_root, None)
-            except BuildLogGitError as nested_exc:
+            except ShipnoteGitError as nested_exc:
                 LOGGER.error(f"Git read failed: {nested_exc}")
                 return 0
         else:
@@ -121,7 +121,7 @@ def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> i
 
         try:
             files_changed = get_commit_files_changed(repo_cfg.repo_root, commit.sha)
-        except BuildLogGitError as exc:
+        except ShipnoteGitError as exc:
             LOGGER.error(f"Git read failed for commit {commit.sha[:7]} file list: {exc}")
             git_failed = True
             break
@@ -137,7 +137,7 @@ def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> i
         try:
             raw_diff = get_commit_diff(repo_cfg.repo_root, commit.sha)
             diff_stat = get_commit_diff_stat(repo_cfg.repo_root, commit.sha)
-        except BuildLogGitError as exc:
+        except ShipnoteGitError as exc:
             LOGGER.error(f"Git read failed for commit {commit.sha[:7]} diff: {exc}")
             git_failed = True
             break
@@ -151,7 +151,7 @@ def _run_once_locked(repo_cfg: RepoConfig, *, require_secrets: bool = True) -> i
         try:
             current_branch = get_branch_name(repo_cfg.repo_root)
             recent_history = list_recent_messages(repo_cfg.repo_root, repo_cfg.lookback_commits)
-        except BuildLogGitError as exc:
+        except ShipnoteGitError as exc:
             LOGGER.error(f"Git read failed while building context for {commit.sha[:7]}: {exc}")
             git_failed = True
             break
@@ -258,7 +258,7 @@ def run_once(config_path: str, *, require_secrets: bool = True) -> int:
     """Process commit discovery once and persist updated state."""
     repo_cfg = load_repo_config(config_path)
     ensure_runtime_dirs(repo_cfg)
-    lock_path = _runtime_lock_path(repo_cfg.buildlog_dir)
+    lock_path = _runtime_lock_path(repo_cfg.shipnote_dir)
     with exclusive_lock(lock_path):
         return _run_once_locked(repo_cfg, require_secrets=require_secrets)
 
@@ -269,12 +269,12 @@ def run_daemon(config_path: str) -> int:
     ensure_runtime_dirs(repo_cfg)
     load_secrets(required=True)
     ensure_git_repo(repo_cfg.repo_root)
-    lock_path = _runtime_lock_path(repo_cfg.buildlog_dir)
+    lock_path = _runtime_lock_path(repo_cfg.shipnote_dir)
 
     LOGGER.info(
         f"Daemon start: repo={repo_cfg.repo_root} interval={repo_cfg.poll_interval_seconds}s"
     )
-    write_daemon_status(repo_cfg.buildlog_dir, config_path=str(repo_cfg.config_path))
+    write_daemon_status(repo_cfg.shipnote_dir, config_path=str(repo_cfg.config_path))
 
     stop_requested = {"value": False}
 
@@ -303,7 +303,7 @@ def run_daemon(config_path: str) -> int:
     finally:
         signal.signal(signal.SIGINT, prev_int)
         signal.signal(signal.SIGTERM, prev_term)
-        clear_daemon_status(repo_cfg.buildlog_dir)
+        clear_daemon_status(repo_cfg.shipnote_dir)
 
     LOGGER.info("Daemon stopped gracefully.")
     return 0

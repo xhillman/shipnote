@@ -36,7 +36,7 @@ ALLOWED_SIGNALS = {
     "dm_share",
 }
 
-SYSTEM_PROMPT = """You are BuildLog, a content generation agent for a developer who builds in public on Twitter/X.
+SYSTEM_PROMPT = """You are Shipnote, a content generation agent for a developer who builds in public on Twitter/X.
 
 Generate tweet-ready drafts from sanitized commit context.
 

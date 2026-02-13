@@ -13,9 +13,9 @@ from .state_manager import utc_now
 DAEMON_STATUS_FILE = "daemon.json"
 
 
-def daemon_status_path(buildlog_dir: Path) -> Path:
+def daemon_status_path(shipnote_dir: Path) -> Path:
     """Return daemon status path for repo."""
-    return buildlog_dir / DAEMON_STATUS_FILE
+    return shipnote_dir / DAEMON_STATUS_FILE
 
 
 def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
@@ -24,9 +24,9 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
     temp.replace(path)
 
 
-def write_daemon_status(buildlog_dir: Path, *, config_path: str) -> None:
+def write_daemon_status(shipnote_dir: Path, *, config_path: str) -> None:
     """Persist daemon runtime metadata."""
-    path = daemon_status_path(buildlog_dir)
+    path = daemon_status_path(shipnote_dir)
     payload = {
         "pid": os.getpid(),
         "started_at": utc_now(),
@@ -35,9 +35,9 @@ def write_daemon_status(buildlog_dir: Path, *, config_path: str) -> None:
     _atomic_write(path, payload)
 
 
-def clear_daemon_status(buildlog_dir: Path) -> None:
+def clear_daemon_status(shipnote_dir: Path) -> None:
     """Remove daemon runtime metadata."""
-    path = daemon_status_path(buildlog_dir)
+    path = daemon_status_path(shipnote_dir)
     try:
         if path.exists():
             path.unlink()
@@ -45,9 +45,9 @@ def clear_daemon_status(buildlog_dir: Path) -> None:
         pass
 
 
-def read_daemon_status(buildlog_dir: Path) -> dict[str, Any] | None:
+def read_daemon_status(shipnote_dir: Path) -> dict[str, Any] | None:
     """Load daemon runtime metadata if available."""
-    path = daemon_status_path(buildlog_dir)
+    path = daemon_status_path(shipnote_dir)
     if not path.exists():
         return None
     try:

@@ -1,4 +1,4 @@
-"""State load/save helpers for BuildLog."""
+"""State load/save helpers for Shipnote."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from .errors import BuildLogStateError
+from .errors import ShipnoteStateError
 
 MAX_PROCESSED_COMMITS = 100
 MAX_RECENT_DRAFTS = 30
@@ -47,9 +47,9 @@ def default_state(last_commit_sha: str | None = None) -> dict[str, Any]:
     }
 
 
-def state_path(buildlog_dir: Path) -> Path:
+def state_path(shipnote_dir: Path) -> Path:
     """Return state file path for a repo."""
-    return buildlog_dir / "state.json"
+    return shipnote_dir / "state.json"
 
 
 def _normalize_state(data: dict[str, Any]) -> tuple[dict[str, Any], bool]:
@@ -137,7 +137,7 @@ def save_state(path: Path, state: dict[str, Any]) -> None:
         temp.write_text(json.dumps(normalized, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         temp.replace(path)
     except Exception as exc:
-        raise BuildLogStateError(f"Failed to save state at {path}: {exc}") from exc
+        raise ShipnoteStateError(f"Failed to save state at {path}: {exc}") from exc
 
 
 def reset_state(path: Path, *, last_commit_sha: str | None = None) -> dict[str, Any]:

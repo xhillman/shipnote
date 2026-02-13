@@ -32,14 +32,13 @@ Homepage = "https://github.com/xavierhillman/shipnote"
 Repository = "https://github.com/xavierhillman/shipnote"
 
 [project.scripts]
-shipnote = "buildlog.cli:main"
-buildlog = "buildlog.cli:main"
+shipnote = "shipnote.cli:main"
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
-include = ["buildlog*"]
+include = ["shipnote*"]
 
 [tool.setuptools.package-data]
-"buildlog.assets.templates" = ["*.md"]
+"shipnote.assets.templates" = ["*.md"]

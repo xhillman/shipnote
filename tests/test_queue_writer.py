@@ -4,27 +4,27 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from buildlog.config_loader import ContentBalanceConfig, RepoConfig, SkipPatternsConfig
-from buildlog.git_cli import CommitInfo
-from buildlog.queue_writer import write_drafts
+from shipnote.config_loader import ContentBalanceConfig, RepoConfig, SkipPatternsConfig
+from shipnote.git_cli import CommitInfo
+from shipnote.queue_writer import write_drafts
 
 
 class QueueWriterTests(unittest.TestCase):
     def _repo_cfg(self, root: Path) -> RepoConfig:
-        buildlog_dir = root / ".buildlog"
+        shipnote_dir = root / ".shipnote"
         return RepoConfig(
-            config_path=buildlog_dir / "config.yaml",
+            config_path=shipnote_dir / "config.yaml",
             repo_root=root,
-            buildlog_dir=buildlog_dir,
+            shipnote_dir=shipnote_dir,
             project_name="Test",
             project_description="Test project",
             voice_description="Direct",
             poll_interval_seconds=60,
             max_drafts_per_commit=3,
             lookback_commits=10,
-            template_dir=buildlog_dir / "templates",
-            queue_dir=buildlog_dir / "queue",
-            archive_dir=buildlog_dir / "archive",
+            template_dir=shipnote_dir / "templates",
+            queue_dir=shipnote_dir / "queue",
+            archive_dir=shipnote_dir / "archive",
             skip_patterns=SkipPatternsConfig(messages=[], files_only=[], min_meaningful_files=1),
             content_balance=ContentBalanceConfig(authority=30, translation=25, personal=25, growth=20),
             secret_patterns=[],

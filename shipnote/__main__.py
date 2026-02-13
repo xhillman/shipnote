@@ -1,4 +1,4 @@
-"""Module entry for `python -m buildlog`."""
+"""Module entry for `python -m shipnote`."""
 
 from .cli import main
 

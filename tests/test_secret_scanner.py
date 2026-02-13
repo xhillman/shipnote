@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import unittest
 
-from buildlog.secret_scanner import REDACTION_TOKEN, redact_diff
+from shipnote.secret_scanner import REDACTION_TOKEN, redact_diff
 
 
 class SecretScannerTests(unittest.TestCase):

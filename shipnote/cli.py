@@ -1,4 +1,4 @@
-"""BuildLog CLI entrypoints."""
+"""Shipnote CLI entrypoints."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .config_loader import AXIS_MODEL_KEY, DEFAULT_CONFIG_PATH, load_repo_config, load_secrets
 from .daemon_runtime import is_pid_alive, read_daemon_status, uptime_seconds
-from .errors import BuildLogError
+from .errors import ShipnoteError
 from .git_cli import ensure_git_repo, get_branch_name, get_head_sha
 from .lockfile import exclusive_lock
 from .operator import answer_question, run_chat
@@ -23,7 +23,7 @@ def _add_config_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
         default=DEFAULT_CONFIG_PATH,
-        help="Path to repo config (default: .buildlog/config.yaml)",
+        help="Path to repo config (default: .shipnote/config.yaml)",
     )
 
 
@@ -63,7 +63,7 @@ def _add_bootstrap_args(parser: argparse.ArgumentParser) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="buildlog")
+    parser = argparse.ArgumentParser(prog="shipnote")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_start = sub.add_parser("start", help="Run daemon loop")
@@ -81,14 +81,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_check = sub.add_parser("check", help="Validate config, templates, and secrets")
     _add_config_arg(p_check)
 
-    p_ask = sub.add_parser("ask", help="Ask BuildLog questions")
+    p_ask = sub.add_parser("ask", help="Ask Shipnote questions")
     _add_config_arg(p_ask)
     p_ask.add_argument("question", help="Question text")
 
-    p_chat = sub.add_parser("chat", help="Interactive BuildLog chat")
+    p_chat = sub.add_parser("chat", help="Interactive Shipnote chat")
     _add_config_arg(p_chat)
 
-    p_init = sub.add_parser("init", help="Bootstrap .buildlog config and templates")
+    p_init = sub.add_parser("init", help="Bootstrap .shipnote config and templates")
     _add_bootstrap_args(p_init)
 
     p_launch = sub.add_parser(
@@ -112,10 +112,10 @@ def cmd_run_once(config_path: str) -> int:
 def cmd_status(config_path: str) -> int:
     repo_cfg = load_repo_config(config_path)
     current_head = get_head_sha(repo_cfg.repo_root)
-    st, _, _ = load_state(state_path(repo_cfg.buildlog_dir), fallback_last_sha=current_head)
+    st, _, _ = load_state(state_path(repo_cfg.shipnote_dir), fallback_last_sha=current_head)
     ledger = st.get("content_ledger", {})
     counts = ledger.get("category_counts_this_week", {})
-    daemon = read_daemon_status(repo_cfg.buildlog_dir)
+    daemon = read_daemon_status(repo_cfg.shipnote_dir)
     daemon_line = "stopped"
     if daemon:
         pid = daemon.get("pid")
@@ -139,9 +139,9 @@ def cmd_status(config_path: str) -> int:
 def cmd_reset(config_path: str) -> int:
     repo_cfg = load_repo_config(config_path)
     current_head = get_head_sha(repo_cfg.repo_root)
-    lock_path = repo_cfg.buildlog_dir / "runtime.lock"
+    lock_path = repo_cfg.shipnote_dir / "runtime.lock"
     with exclusive_lock(lock_path):
-        reset_state(state_path(repo_cfg.buildlog_dir), last_commit_sha=current_head)
+        reset_state(state_path(repo_cfg.shipnote_dir), last_commit_sha=current_head)
     print("State reset complete.")
     return 0
 
@@ -203,7 +203,7 @@ def _bootstrap_from_args(args: argparse.Namespace) -> Path:
 
 def cmd_init(args: argparse.Namespace) -> int:
     config_path = _bootstrap_from_args(args)
-    print(f"next: buildlog check --config {config_path}")
+    print(f"next: shipnote check --config {config_path}")
     return 0
 
 
@@ -239,7 +239,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_launch(args)
         parser.error(f"Unknown command: {args.command}")
         return 2
-    except BuildLogError as exc:
+    except ShipnoteError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
 

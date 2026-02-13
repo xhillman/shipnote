@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from buildlog.errors import BuildLogGitError
-from buildlog.git_cli import get_branch_name, list_new_commits
+from shipnote.errors import ShipnoteGitError
+from shipnote.git_cli import get_branch_name, list_new_commits
 
 
 def _run(repo: Path, args: list[str]) -> None:
@@ -49,7 +49,7 @@ class GitCliTests(unittest.TestCase):
             _run(repo, ["add", "a.txt"])
             _run(repo, ["commit", "-m", "after-rewrite"])
 
-            with self.assertRaises(BuildLogGitError):
+            with self.assertRaises(ShipnoteGitError):
                 list_new_commits(repo, second)
 
 

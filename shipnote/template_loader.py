@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .errors import BuildLogConfigError
+from .errors import ShipnoteConfigError
 
 STANDARD_TEMPLATE_FILES = (
     "authority.md",
@@ -32,7 +32,7 @@ class TemplateDocument:
 def _parse_frontmatter(raw: str, filename: str) -> tuple[dict[str, Any], str]:
     lines = raw.splitlines()
     if not lines or lines[0].strip() != "---":
-        raise BuildLogConfigError(f"Template '{filename}' is missing YAML frontmatter.")
+        raise ShipnoteConfigError(f"Template '{filename}' is missing YAML frontmatter.")
 
     end_idx = None
     for idx in range(1, len(lines)):
@@ -40,7 +40,7 @@ def _parse_frontmatter(raw: str, filename: str) -> tuple[dict[str, Any], str]:
             end_idx = idx
             break
     if end_idx is None:
-        raise BuildLogConfigError(f"Template '{filename}' has unclosed YAML frontmatter.")
+        raise ShipnoteConfigError(f"Template '{filename}' has unclosed YAML frontmatter.")
 
     frontmatter_lines = lines[1:end_idx]
     body = "\n".join(lines[end_idx + 1 :]).lstrip("\n")
@@ -55,9 +55,9 @@ def _parse_frontmatter(raw: str, filename: str) -> tuple[dict[str, Any], str]:
         frontmatter[key.strip()] = value.strip()
 
     if "content_type" not in frontmatter:
-        raise BuildLogConfigError(f"Template '{filename}' frontmatter missing 'content_type'.")
+        raise ShipnoteConfigError(f"Template '{filename}' frontmatter missing 'content_type'.")
     if "name" not in frontmatter:
-        raise BuildLogConfigError(f"Template '{filename}' frontmatter missing 'name'.")
+        raise ShipnoteConfigError(f"Template '{filename}' frontmatter missing 'name'.")
 
     return frontmatter, body
 
@@ -65,11 +65,11 @@ def _parse_frontmatter(raw: str, filename: str) -> tuple[dict[str, Any], str]:
 def load_templates(template_dir: Path) -> dict[str, TemplateDocument]:
     """Load all markdown templates from a directory."""
     if not template_dir.exists() or not template_dir.is_dir():
-        raise BuildLogConfigError(f"Template directory not found: {template_dir}")
+        raise ShipnoteConfigError(f"Template directory not found: {template_dir}")
 
     paths = sorted(template_dir.glob("*.md"))
     if not paths:
-        raise BuildLogConfigError(f"Template directory is empty: {template_dir}")
+        raise ShipnoteConfigError(f"Template directory is empty: {template_dir}")
 
     templates: dict[str, TemplateDocument] = {}
     for path in paths:

@@ -1,4 +1,4 @@
-"""Bootstrap helpers for one-command BuildLog setup."""
+"""Bootstrap helpers for one-command Shipnote setup."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
-from .errors import BuildLogConfigError
+from .errors import ShipnoteConfigError
 from .git_cli import ensure_git_repo
 
 DEFAULT_VOICE_DESCRIPTION = (
@@ -77,9 +77,9 @@ def _default_config_yaml(
         "max_drafts_per_commit: 3",
         "lookback_commits: 10",
         "",
-        'template_dir: ".buildlog/templates"',
-        'queue_dir: ".buildlog/queue"',
-        'archive_dir: ".buildlog/archive"',
+        'template_dir: ".shipnote/templates"',
+        'queue_dir: ".shipnote/queue"',
+        'archive_dir: ".shipnote/archive"',
         "",
         "skip_patterns:",
         "  messages:",
@@ -111,7 +111,7 @@ def _ensure_git_repo(repo_path: Path, *, init_git: bool) -> bool:
         return False
     except Exception:
         if not init_git:
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Target path is not a git repository: {repo_path}. "
                 "Run `git init` or pass --init-git."
             )
@@ -123,7 +123,7 @@ def _ensure_git_repo(repo_path: Path, *, init_git: bool) -> bool:
             check=False,
         )
         if result.returncode != 0:
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Failed to initialize git repository at {repo_path}: "
                 f"{result.stderr.strip() or 'unknown error'}"
             )
@@ -137,7 +137,7 @@ def _write_text_atomic(path: Path, content: str) -> None:
 
 
 def _bundled_template_paths() -> list[resources.abc.Traversable]:
-    root = resources.files("buildlog.assets.templates")
+    root = resources.files("shipnote.assets.templates")
     return sorted(
         [item for item in root.iterdir() if item.name.endswith(".md")],
         key=lambda item: item.name,
@@ -154,18 +154,18 @@ def bootstrap_repo(
     force: bool = False,
     init_git: bool = False,
 ) -> BootstrapResult:
-    """Create or update BuildLog repo scaffolding in a target project."""
+    """Create or update Shipnote repo scaffolding in a target project."""
     repo = repo_path.expanduser().resolve()
     if not repo.exists() or not repo.is_dir():
-        raise BuildLogConfigError(f"Target repo path does not exist or is not a directory: {repo}")
+        raise ShipnoteConfigError(f"Target repo path does not exist or is not a directory: {repo}")
 
     git_initialized = _ensure_git_repo(repo, init_git=init_git)
 
-    buildlog_dir = repo / ".buildlog"
-    templates_dir = buildlog_dir / "templates"
-    queue_dir = buildlog_dir / "queue"
-    archive_dir = buildlog_dir / "archive"
-    buildlog_dir.mkdir(parents=True, exist_ok=True)
+    shipnote_dir = repo / ".shipnote"
+    templates_dir = shipnote_dir / "templates"
+    queue_dir = shipnote_dir / "queue"
+    archive_dir = shipnote_dir / "archive"
+    shipnote_dir.mkdir(parents=True, exist_ok=True)
     templates_dir.mkdir(parents=True, exist_ok=True)
     queue_dir.mkdir(parents=True, exist_ok=True)
     archive_dir.mkdir(parents=True, exist_ok=True)
@@ -173,10 +173,10 @@ def bootstrap_repo(
     effective_project_name = project_name or repo.name
     effective_description = (
         project_description
-        or f"BuildLog-enabled project at {repo.name}."
+        or f"Shipnote-enabled project at {repo.name}."
     )
     effective_voice = voice_description or DEFAULT_VOICE_DESCRIPTION
-    config_path = buildlog_dir / "config.yaml"
+    config_path = shipnote_dir / "config.yaml"
     config_content = _default_config_yaml(
         project_name=effective_project_name,
         project_description=effective_description,

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .errors import BuildLogGitError
+from .errors import ShipnoteGitError
 
 
 @dataclass(frozen=True)
@@ -30,7 +30,7 @@ def _run_git(repo_root: Path, args: list[str]) -> str:
     )
     if result.returncode != 0:
         stderr = result.stderr.strip() or "unknown git error"
-        raise BuildLogGitError(f"git {' '.join(args)} failed: {stderr}")
+        raise ShipnoteGitError(f"git {' '.join(args)} failed: {stderr}")
     return result.stdout
 
 
@@ -38,14 +38,14 @@ def ensure_git_repo(repo_root: Path) -> None:
     """Validate that the path is inside a git work tree."""
     output = _run_git(repo_root, ["rev-parse", "--is-inside-work-tree"]).strip().lower()
     if output != "true":
-        raise BuildLogGitError(f"Path is not a git work tree: {repo_root}")
+        raise ShipnoteGitError(f"Path is not a git work tree: {repo_root}")
 
 
 def get_head_sha(repo_root: Path) -> str | None:
     """Return HEAD commit SHA or None for empty repos."""
     try:
         return _run_git(repo_root, ["rev-parse", "HEAD"]).strip() or None
-    except BuildLogGitError:
+    except ShipnoteGitError:
         return None
 
 
@@ -59,14 +59,14 @@ def get_branch_name(repo_root: Path) -> str:
         branch = _run_git(repo_root, ["rev-parse", "--abbrev-ref", "HEAD"]).strip()
         if branch:
             return branch
-    except BuildLogGitError:
+    except ShipnoteGitError:
         pass
 
     try:
         branch = _run_git(repo_root, ["symbolic-ref", "--quiet", "--short", "HEAD"]).strip()
         if branch:
             return branch
-    except BuildLogGitError:
+    except ShipnoteGitError:
         pass
 
     return "unborn"
@@ -126,7 +126,7 @@ def list_new_commits(repo_root: Path, last_sha: str | None) -> list[CommitInfo]:
         return parse_log_lines(output)
 
     if not commit_in_history(repo_root, last_sha):
-        raise BuildLogGitError(f"Last seen commit {last_sha} is not in current history.")
+        raise ShipnoteGitError(f"Last seen commit {last_sha} is not in current history.")
 
     output = _run_git(repo_root, ["log", "--reverse", "--format=%H|||%s|||%an|||%ai", f"{last_sha}..HEAD"])
     return parse_log_lines(output)
@@ -136,7 +136,7 @@ def get_commit_diff(repo_root: Path, sha: str) -> str:
     """Return commit diff text for a single commit."""
     try:
         return _run_git(repo_root, ["diff", f"{sha}^..{sha}"])
-    except BuildLogGitError:
+    except ShipnoteGitError:
         # Handle root commits (no parent) safely.
         return _run_git(repo_root, ["show", "--format=", sha])
 
@@ -145,7 +145,7 @@ def get_commit_diff_stat(repo_root: Path, sha: str) -> str:
     """Return human-readable diff stat for a single commit."""
     try:
         return _run_git(repo_root, ["diff", "--stat", f"{sha}^..{sha}"])
-    except BuildLogGitError:
+    except ShipnoteGitError:
         return _run_git(repo_root, ["show", "--format=", "--stat", sha])
 
 
@@ -153,7 +153,7 @@ def get_commit_files_changed(repo_root: Path, sha: str) -> list[str]:
     """Return changed files for a commit."""
     try:
         output = _run_git(repo_root, ["diff", "--name-only", f"{sha}^..{sha}"])
-    except BuildLogGitError:
+    except ShipnoteGitError:
         output = _run_git(repo_root, ["show", "--format=", "--name-only", sha])
     return [line.strip() for line in output.splitlines() if line.strip()]
 

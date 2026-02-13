@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from buildlog.state_manager import load_state, save_state
+from shipnote.state_manager import load_state, save_state
 
 
 class StateManagerTests(unittest.TestCase):

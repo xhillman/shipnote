@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import unittest
 
-from buildlog.config_loader import SkipPatternsConfig
-from buildlog.heuristic_filter import should_keep_commit
+from shipnote.config_loader import SkipPatternsConfig
+from shipnote.heuristic_filter import should_keep_commit
 
 
 class HeuristicFilterTests(unittest.TestCase):

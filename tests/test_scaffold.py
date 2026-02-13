@@ -5,8 +5,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from buildlog.errors import BuildLogConfigError
-from buildlog.scaffold import bootstrap_repo
+from shipnote.errors import ShipnoteConfigError
+from shipnote.scaffold import bootstrap_repo
 
 
 def _run(repo: Path, args: list[str]) -> None:
@@ -27,13 +27,13 @@ class ScaffoldTests(unittest.TestCase):
 
             config_text = result.config_path.read_text(encoding="utf-8")
             self.assertIn("poll_interval_seconds: 45", config_text)
-            self.assertIn('template_dir: ".buildlog/templates"', config_text)
+            self.assertIn('template_dir: ".shipnote/templates"', config_text)
 
     def test_bootstrap_requires_git_without_init_flag(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             repo.mkdir(parents=True, exist_ok=True)
-            with self.assertRaises(BuildLogConfigError):
+            with self.assertRaises(ShipnoteConfigError):
                 bootstrap_repo(repo_path=repo, init_git=False)
 
     def test_bootstrap_can_initialize_git(self) -> None:

@@ -34,7 +34,7 @@ def _fallback_answer(config_path: str, question: str) -> str:
     """Deterministic fallback response when agent run fails."""
     repo_cfg = load_repo_config(config_path)
     current_head = get_head_sha(repo_cfg.repo_root)
-    state, _, _ = load_state(state_path(repo_cfg.buildlog_dir), fallback_last_sha=current_head)
+    state, _, _ = load_state(state_path(repo_cfg.shipnote_dir), fallback_last_sha=current_head)
 
     queue_files = _list_markdown_files(repo_cfg.queue_dir)
     template_files = _list_markdown_files(repo_cfg.template_dir)
@@ -72,7 +72,7 @@ def _build_operator_agent(config_path: str) -> Agent:
     )
     def get_status() -> dict[str, Any]:
         current_head = get_head_sha(repo_cfg.repo_root)
-        state, _, _ = load_state(state_path(repo_cfg.buildlog_dir), fallback_last_sha=current_head)
+        state, _, _ = load_state(state_path(repo_cfg.shipnote_dir), fallback_last_sha=current_head)
         ledger = state.get("content_ledger", {})
         return {
             "repo": str(repo_cfg.repo_root),
@@ -144,7 +144,7 @@ def _build_operator_agent(config_path: str) -> Agent:
     model_name = os.getenv(AXIS_MODEL_KEY, "").strip()
     agent_kwargs: dict[str, Any] = {
         "system": (
-            "You are BuildLog Operator Assistant. "
+            "You are Shipnote Operator Assistant. "
             "Use tools to answer questions about queue state, draft content, templates, "
             "and strategy. Ground claims in tool outputs. Keep responses concise and practical."
         ),
@@ -167,7 +167,7 @@ def _build_operator_agent(config_path: str) -> Agent:
 
 
 def answer_question(config_path: str, question: str) -> str:
-    """Answer BuildLog operator questions using axis-core agent with fallback."""
+    """Answer Shipnote operator questions using axis-core agent with fallback."""
     if not question.strip():
         return "Ask about queue, state, templates, commits, or draft edits."
     try:
@@ -189,10 +189,10 @@ def run_chat(config_path: str) -> int:
         agent = None
         session = None
 
-    print("BuildLog chat started. Type 'exit' or 'quit' to end.")
+    print("Shipnote chat started. Type 'exit' or 'quit' to end.")
     while True:
         try:
-            prompt = input("buildlog> ").strip()
+            prompt = input("shipnote> ").strip()
         except EOFError:
             print()
             return 0

@@ -1,4 +1,4 @@
-"""Config and secrets loading for BuildLog."""
+"""Config and secrets loading for Shipnote."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .errors import BuildLogConfigError, BuildLogSecretsError
+from .errors import ShipnoteConfigError, ShipnoteSecretsError
 
-DEFAULT_CONFIG_PATH = ".buildlog/config.yaml"
-DEFAULT_TEMPLATE_DIR = ".buildlog/templates"
-DEFAULT_QUEUE_DIR = ".buildlog/queue"
-DEFAULT_ARCHIVE_DIR = ".buildlog/archive"
+DEFAULT_CONFIG_PATH = ".shipnote/config.yaml"
+DEFAULT_TEMPLATE_DIR = ".shipnote/templates"
+DEFAULT_QUEUE_DIR = ".shipnote/queue"
+DEFAULT_ARCHIVE_DIR = ".shipnote/archive"
 AXIS_PROVIDER_API_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 AXIS_MODEL_KEY = "AXIS_DEFAULT_MODEL"
 
@@ -52,7 +52,7 @@ class RepoConfig:
 
     config_path: Path
     repo_root: Path
-    buildlog_dir: Path
+    shipnote_dir: Path
     project_name: str
     project_description: str
     voice_description: str
@@ -81,7 +81,7 @@ class SecretsConfig:
 def resolve_repo_root(config_path: Path) -> Path:
     """Resolve repo root from config path."""
     parent = config_path.parent
-    if parent.name == ".buildlog":
+    if parent.name == ".shipnote":
         return parent.parent
     return parent
 
@@ -139,7 +139,7 @@ def _collect_yaml_lines(path: Path) -> list[tuple[int, int, str]]:
             continue
         leading = len(raw_line) - len(raw_line.lstrip(" "))
         if "\t" in raw_line[:leading]:
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Invalid tab indentation in {path} at line {line_no}. Use spaces only."
             )
         cleaned = _strip_inline_comment(raw_line).rstrip()
@@ -152,7 +152,7 @@ def _collect_yaml_lines(path: Path) -> list[tuple[int, int, str]]:
 
 
 def _parse_yaml_subset(path: Path) -> dict[str, Any]:
-    """Parse a constrained YAML subset sufficient for BuildLog config."""
+    """Parse a constrained YAML subset sufficient for Shipnote config."""
     entries = _collect_yaml_lines(path)
     root: dict[str, Any] = {}
     stack: list[tuple[int, dict[str, Any] | list[Any]]] = [(-1, root)]
@@ -168,7 +168,7 @@ def _parse_yaml_subset(path: Path) -> dict[str, Any]:
 
         if text.startswith("- "):
             if not isinstance(parent, list):
-                raise BuildLogConfigError(
+                raise ShipnoteConfigError(
                     f"Unexpected list item in {path} at line {line_no}: no parent list context."
                 )
             item_text = text[2:].strip()
@@ -182,15 +182,15 @@ def _parse_yaml_subset(path: Path) -> dict[str, Any]:
             continue
 
         if ":" not in text:
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Invalid config line in {path} at line {line_no}: expected 'key: value'."
             )
         key, remainder = text.split(":", 1)
         key = key.strip()
         if not key:
-            raise BuildLogConfigError(f"Invalid empty key in {path} at line {line_no}.")
+            raise ShipnoteConfigError(f"Invalid empty key in {path} at line {line_no}.")
         if not isinstance(parent, dict):
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Invalid mapping entry in {path} at line {line_no}: parent is not an object."
             )
         remainder = remainder.strip()
@@ -208,7 +208,7 @@ def _parse_yaml_subset(path: Path) -> dict[str, Any]:
 
 def _as_dict(raw: Any, key: str) -> dict[str, Any]:
     if not isinstance(raw, dict):
-        raise BuildLogConfigError(f"Config key '{key}' must be an object.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be an object.")
     return raw
 
 
@@ -216,7 +216,7 @@ def _as_str(raw: Any, key: str, *, default: str | None = None) -> str:
     if raw is None and default is not None:
         return default
     if not isinstance(raw, str) or not raw.strip():
-        raise BuildLogConfigError(f"Config key '{key}' must be a non-empty string.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be a non-empty string.")
     return raw
 
 
@@ -226,19 +226,19 @@ def _as_int(raw: Any, key: str, *, minimum: int = 0, default: int | None = None)
     elif isinstance(raw, int):
         value = raw
     else:
-        raise BuildLogConfigError(f"Config key '{key}' must be an integer.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be an integer.")
     if value < minimum:
-        raise BuildLogConfigError(f"Config key '{key}' must be >= {minimum}.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be >= {minimum}.")
     return value
 
 
 def _as_str_list(raw: Any, key: str) -> list[str]:
     if not isinstance(raw, list):
-        raise BuildLogConfigError(f"Config key '{key}' must be a list.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be a list.")
     out: list[str] = []
     for idx, item in enumerate(raw):
         if not isinstance(item, str):
-            raise BuildLogConfigError(f"Config key '{key}[{idx}]' must be a string.")
+            raise ShipnoteConfigError(f"Config key '{key}[{idx}]' must be a string.")
         out.append(item)
     return out
 
@@ -246,12 +246,12 @@ def _as_str_list(raw: Any, key: str) -> list[str]:
 def _ensure_relative_repo_path(repo_root: Path, path_value: str, key: str) -> Path:
     rel = Path(path_value)
     if rel.is_absolute():
-        raise BuildLogConfigError(f"Config key '{key}' must be a relative path.")
+        raise ShipnoteConfigError(f"Config key '{key}' must be a relative path.")
     resolved = (repo_root / rel).resolve()
     try:
         resolved.relative_to(repo_root.resolve())
     except ValueError as exc:
-        raise BuildLogConfigError(
+        raise ShipnoteConfigError(
             f"Config key '{key}' resolves outside repository root: {path_value}"
         ) from exc
     return resolved
@@ -262,7 +262,7 @@ def _validate_patterns(patterns: list[str], key: str) -> None:
         try:
             re.compile(pattern)
         except re.error as exc:
-            raise BuildLogConfigError(
+            raise ShipnoteConfigError(
                 f"Invalid regex in '{key}[{idx}]': {exc}"
             ) from exc
 
@@ -314,7 +314,7 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
         growth=_as_int(balance_raw.get("growth"), "content_balance.growth", minimum=0),
     )
     if sum(content_balance.as_dict().values()) != 100:
-        raise BuildLogConfigError("content_balance percentages must sum to 100.")
+        raise ShipnoteConfigError("content_balance percentages must sum to 100.")
 
     secret_patterns = _as_str_list(raw.get("secret_patterns"), "secret_patterns")
     _validate_patterns(secret_patterns, "secret_patterns")
@@ -322,7 +322,7 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
     return RepoConfig(
         config_path=config_path,
         repo_root=repo_root,
-        buildlog_dir=(repo_root / ".buildlog").resolve(),
+        shipnote_dir=(repo_root / ".shipnote").resolve(),
         project_name=project_name,
         project_description=project_description,
         voice_description=voice_description,
@@ -343,11 +343,11 @@ def load_repo_config(config_path_str: str) -> RepoConfig:
     """Load and validate repo config."""
     config_path = Path(config_path_str).expanduser().resolve()
     if not config_path.exists():
-        raise BuildLogConfigError(
+        raise ShipnoteConfigError(
             f"Config file not found: {config_path}. Create {DEFAULT_CONFIG_PATH} in your repo."
         )
     if not config_path.is_file():
-        raise BuildLogConfigError(f"Config path is not a file: {config_path}")
+        raise ShipnoteConfigError(f"Config path is not a file: {config_path}")
 
     parsed = _parse_yaml_subset(config_path)
     repo_root = resolve_repo_root(config_path)
@@ -355,8 +355,8 @@ def load_repo_config(config_path_str: str) -> RepoConfig:
 
 
 def default_secrets_path() -> Path:
-    """Return the global BuildLog secrets path."""
-    return (Path.home() / ".buildlog" / "secrets.env").expanduser().resolve()
+    """Return the global Shipnote secrets path."""
+    return (Path.home() / ".shipnote" / "secrets.env").expanduser().resolve()
 
 
 def _parse_env_file(path: Path) -> dict[str, str]:
@@ -378,7 +378,7 @@ def load_secrets(*, required: bool = True) -> SecretsConfig:
     path = default_secrets_path()
     if not path.exists():
         if required:
-            raise BuildLogSecretsError(f"Secrets file missing: {path}. Create ~/.buildlog/secrets.env")
+            raise ShipnoteSecretsError(f"Secrets file missing: {path}. Create ~/.shipnote/secrets.env")
         return SecretsConfig(
             secrets_path=path,
             values={},
@@ -386,7 +386,7 @@ def load_secrets(*, required: bool = True) -> SecretsConfig:
             permissions_ok=False,
         )
     if not path.is_file():
-        raise BuildLogSecretsError(f"Secrets path is not a file: {path}")
+        raise ShipnoteSecretsError(f"Secrets path is not a file: {path}")
 
     mode = stat.S_IMODE(path.stat().st_mode)
     mode_octal = oct(mode)
@@ -400,7 +400,7 @@ def load_secrets(*, required: bool = True) -> SecretsConfig:
         has_provider_key = any(bool(os.getenv(key)) for key in AXIS_PROVIDER_API_KEYS)
         if not has_provider_key:
             joined = ", ".join(AXIS_PROVIDER_API_KEYS)
-            raise BuildLogSecretsError(
+            raise ShipnoteSecretsError(
                 f"Missing axis-core provider API key in {path}. Add one of: {joined}."
             )
 
@@ -414,6 +414,6 @@ def load_secrets(*, required: bool = True) -> SecretsConfig:
 
 def ensure_runtime_dirs(repo_cfg: RepoConfig) -> None:
     """Create required runtime dirs."""
-    repo_cfg.buildlog_dir.mkdir(parents=True, exist_ok=True)
+    repo_cfg.shipnote_dir.mkdir(parents=True, exist_ok=True)
     repo_cfg.queue_dir.mkdir(parents=True, exist_ok=True)
     repo_cfg.archive_dir.mkdir(parents=True, exist_ok=True)
