@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import re
 import stat
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,11 @@ DEFAULT_CONFIG_PATH = ".shipnote/config.yaml"
 DEFAULT_TEMPLATE_DIR = ".shipnote/templates"
 DEFAULT_QUEUE_DIR = ".shipnote/queue"
 DEFAULT_ARCHIVE_DIR = ".shipnote/archive"
+DEFAULT_CONTEXT_ADDITIONAL_FILES = [".shipnote/context.md"]
+DEFAULT_CONTEXT_MAX_TOTAL_CHARS = 12000
+DEFAULT_FOCUS_TOPICS = ["software engineering", "developer productivity"]
+DEFAULT_AVOID_TOPICS = ["politics", "sports", "crypto"]
+DEFAULT_ENGAGEMENT_REMINDER = "Engage in relevant community discussions before and after posting."
 AXIS_PROVIDER_API_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 AXIS_MODEL_KEY = "AXIS_DEFAULT_MODEL"
 
@@ -47,6 +52,23 @@ class ContentBalanceConfig:
 
 
 @dataclass(frozen=True)
+class ContextConfig:
+    """Additional context-file settings from config."""
+
+    additional_files: list[str]
+    max_total_chars: int
+
+
+@dataclass(frozen=True)
+class ContentPolicyConfig:
+    """Content policy settings from config."""
+
+    focus_topics: list[str]
+    avoid_topics: list[str]
+    engagement_reminder: str
+
+
+@dataclass(frozen=True)
 class RepoConfig:
     """Resolved repository-level config paths and settings."""
 
@@ -66,6 +88,19 @@ class RepoConfig:
     content_balance: ContentBalanceConfig
     secret_patterns: list[str]
     raw_config: dict[str, Any]
+    context: ContextConfig = field(
+        default_factory=lambda: ContextConfig(
+            additional_files=list(DEFAULT_CONTEXT_ADDITIONAL_FILES),
+            max_total_chars=DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
+        )
+    )
+    content_policy: ContentPolicyConfig = field(
+        default_factory=lambda: ContentPolicyConfig(
+            focus_topics=list(DEFAULT_FOCUS_TOPICS),
+            avoid_topics=list(DEFAULT_AVOID_TOPICS),
+            engagement_reminder=DEFAULT_ENGAGEMENT_REMINDER,
+        )
+    )
 
 
 @dataclass(frozen=True)
@@ -243,6 +278,20 @@ def _as_str_list(raw: Any, key: str) -> list[str]:
     return out
 
 
+def _validate_non_empty_strings(values: list[str], key: str) -> None:
+    if not values:
+        raise ShipnoteConfigError(f"Config key '{key}' must contain at least one value.")
+    for idx, item in enumerate(values):
+        if not item.strip():
+            raise ShipnoteConfigError(f"Config key '{key}[{idx}]' must be a non-empty string.")
+
+
+def _as_non_empty_str_list(raw: Any, key: str, *, default: list[str]) -> list[str]:
+    values = _as_str_list(raw if raw is not None else list(default), key)
+    _validate_non_empty_strings(values, key)
+    return values
+
+
 def _ensure_relative_repo_path(repo_root: Path, path_value: str, key: str) -> Path:
     rel = Path(path_value)
     if rel.is_absolute():
@@ -319,6 +368,49 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
     secret_patterns = _as_str_list(raw.get("secret_patterns"), "secret_patterns")
     _validate_patterns(secret_patterns, "secret_patterns")
 
+    context_raw = _as_dict(raw.get("context", {}), "context")
+    additional_files = _as_str_list(
+        context_raw.get("additional_files", list(DEFAULT_CONTEXT_ADDITIONAL_FILES)),
+        "context.additional_files",
+    )
+    for idx, path_value in enumerate(additional_files):
+        if not path_value.strip():
+            raise ShipnoteConfigError(
+                f"Config key 'context.additional_files[{idx}]' must be a non-empty string."
+            )
+    max_total_chars = _as_int(
+        context_raw.get("max_total_chars"),
+        "context.max_total_chars",
+        minimum=1,
+        default=DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
+    )
+    context = ContextConfig(
+        additional_files=additional_files,
+        max_total_chars=max_total_chars,
+    )
+
+    content_policy_raw = _as_dict(raw.get("content_policy", {}), "content_policy")
+    focus_topics = _as_non_empty_str_list(
+        content_policy_raw.get("focus_topics"),
+        "content_policy.focus_topics",
+        default=DEFAULT_FOCUS_TOPICS,
+    )
+    avoid_topics = _as_non_empty_str_list(
+        content_policy_raw.get("avoid_topics"),
+        "content_policy.avoid_topics",
+        default=DEFAULT_AVOID_TOPICS,
+    )
+    engagement_reminder = _as_str(
+        content_policy_raw.get("engagement_reminder"),
+        "content_policy.engagement_reminder",
+        default=DEFAULT_ENGAGEMENT_REMINDER,
+    )
+    content_policy = ContentPolicyConfig(
+        focus_topics=focus_topics,
+        avoid_topics=avoid_topics,
+        engagement_reminder=engagement_reminder,
+    )
+
     return RepoConfig(
         config_path=config_path,
         repo_root=repo_root,
@@ -335,6 +427,8 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
         skip_patterns=skip_patterns,
         content_balance=content_balance,
         secret_patterns=secret_patterns,
+        context=context,
+        content_policy=content_policy,
         raw_config=raw,
     )
 

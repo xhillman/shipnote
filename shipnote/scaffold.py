@@ -7,6 +7,13 @@ from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
+from .config_loader import (
+    DEFAULT_AVOID_TOPICS,
+    DEFAULT_CONTEXT_ADDITIONAL_FILES,
+    DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
+    DEFAULT_ENGAGEMENT_REMINDER,
+    DEFAULT_FOCUS_TOPICS,
+)
 from .errors import ShipnoteConfigError
 from .git_cli import ensure_git_repo
 
@@ -44,6 +51,11 @@ DEFAULT_SECRET_PATTERNS = [
     "password\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
     "secret\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
 ]
+DEFAULT_CONTEXT_FILES = list(DEFAULT_CONTEXT_ADDITIONAL_FILES)
+DEFAULT_CONTEXT_CHARS = DEFAULT_CONTEXT_MAX_TOTAL_CHARS
+DEFAULT_CONTENT_FOCUS_TOPICS = list(DEFAULT_FOCUS_TOPICS)
+DEFAULT_CONTENT_AVOID_TOPICS = list(DEFAULT_AVOID_TOPICS)
+DEFAULT_CONTENT_ENGAGEMENT_REMINDER = DEFAULT_ENGAGEMENT_REMINDER
 
 
 @dataclass(frozen=True)
@@ -80,6 +92,18 @@ def _default_config_yaml(
         'template_dir: ".shipnote/templates"',
         'queue_dir: ".shipnote/queue"',
         'archive_dir: ".shipnote/archive"',
+        "",
+        "context:",
+        "  additional_files:",
+        *[f'    - "{path}"' for path in DEFAULT_CONTEXT_FILES],
+        f"  max_total_chars: {DEFAULT_CONTEXT_CHARS}",
+        "",
+        "content_policy:",
+        "  focus_topics:",
+        *[f'    - "{topic}"' for topic in DEFAULT_CONTENT_FOCUS_TOPICS],
+        "  avoid_topics:",
+        *[f'    - "{topic}"' for topic in DEFAULT_CONTENT_AVOID_TOPICS],
+        f"  engagement_reminder: {_yaml_quote(DEFAULT_CONTENT_ENGAGEMENT_REMINDER)}",
         "",
         "skip_patterns:",
         "  messages:",
@@ -209,4 +233,3 @@ def bootstrap_repo(
         template_count_written=written_count,
         git_initialized=git_initialized,
     )
-
