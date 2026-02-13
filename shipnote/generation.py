@@ -11,6 +11,7 @@ from axis_core import Agent, RetryPolicy, Timeouts
 
 from .axis_runtime import quiet_axis_logs
 from .config_loader import AXIS_MODEL_KEY, RepoConfig
+from .prompts import build_generation_system_prompt
 from .template_loader import TemplateDocument
 
 ALLOWED_CATEGORIES = {
@@ -35,20 +36,6 @@ ALLOWED_SIGNALS = {
     "copy_link",
     "dm_share",
 }
-
-SYSTEM_PROMPT = """You are Shipnote, a content generation agent for a developer who builds in public on Twitter/X.
-
-Generate tweet-ready drafts from sanitized commit context.
-
-Hard constraints:
-- Hook -> Context -> Value -> Payoff (punchline at end)
-- Single tweets must remain under 280 chars
-- Threads max 7 tweets and first tweet must stand alone
-- Stay inside niche: AI agents, building in public, automation, indie hacking, systems thinking
-- Never include off-topic content (politics, sports, crypto)
-- Keep tone technical but accessible, direct, and specific.
-"""
-
 
 def _build_user_prompt(
     repo_cfg: RepoConfig,
@@ -183,9 +170,10 @@ def generate_drafts(
     if max_drafts < 1:
         return {"drafts": [], "skip_reason": "max_drafts must be >= 1"}
 
+    system_prompt = build_generation_system_prompt(repo_cfg)
     model_name = os.getenv(AXIS_MODEL_KEY, "").strip()
     agent_kwargs: dict[str, Any] = {
-        "system": SYSTEM_PROMPT,
+        "system": system_prompt,
         "planner": "sequential",
         "telemetry": False,
         "verbose": False,
