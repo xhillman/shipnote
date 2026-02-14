@@ -22,6 +22,15 @@ DEFAULT_AVOID_TOPICS = ["politics", "sports", "crypto"]
 DEFAULT_ENGAGEMENT_REMINDER = "Engage in relevant community discussions before and after posting."
 AXIS_PROVIDER_API_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 AXIS_MODEL_KEY = "AXIS_DEFAULT_MODEL"
+SHIPNOTE_API_KEY = "SHIPNOTE_API_KEY"
+SHIPNOTE_MODEL_KEY = "SHIPNOTE_MODEL"
+SHIPNOTE_PROVIDER_KEY = "SHIPNOTE_PROVIDER"
+SHIPNOTE_PROVIDER_OPENAI = "openai"
+SHIPNOTE_PROVIDER_ANTHROPIC = "anthropic"
+SHIPNOTE_PROVIDER_MAP = {
+    SHIPNOTE_PROVIDER_OPENAI: "OPENAI_API_KEY",
+    SHIPNOTE_PROVIDER_ANTHROPIC: "ANTHROPIC_API_KEY",
+}
 
 
 @dataclass(frozen=True)
@@ -467,6 +476,65 @@ def _parse_env_file(path: Path) -> dict[str, str]:
     return values
 
 
+def _first_non_empty(*values: str | None) -> str | None:
+    for value in values:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+    return None
+
+
+def _resolve_shipnote_provider(process_env: dict[str, str], file_values: dict[str, str]) -> str:
+    provider = _first_non_empty(
+        process_env.get(SHIPNOTE_PROVIDER_KEY),
+        file_values.get(SHIPNOTE_PROVIDER_KEY),
+    )
+    if provider is None:
+        return SHIPNOTE_PROVIDER_OPENAI
+
+    normalized = provider.lower()
+    if normalized not in SHIPNOTE_PROVIDER_MAP:
+        allowed = ", ".join(sorted(SHIPNOTE_PROVIDER_MAP.keys()))
+        raise ShipnoteSecretsError(
+            f"Invalid {SHIPNOTE_PROVIDER_KEY}='{provider}'. Expected one of: {allowed}."
+        )
+    return normalized
+
+
+def _apply_shipnote_aliases(process_env: dict[str, str], file_values: dict[str, str]) -> None:
+    model = _first_non_empty(
+        process_env.get(AXIS_MODEL_KEY),
+        process_env.get(SHIPNOTE_MODEL_KEY),
+        file_values.get(AXIS_MODEL_KEY),
+        file_values.get(SHIPNOTE_MODEL_KEY),
+    )
+    if model is not None:
+        os.environ[AXIS_MODEL_KEY] = model
+
+    explicit_provider_in_process = any(_first_non_empty(process_env.get(key)) for key in AXIS_PROVIDER_API_KEYS)
+    if explicit_provider_in_process:
+        return
+
+    shipnote_api_key = _first_non_empty(
+        process_env.get(SHIPNOTE_API_KEY),
+        file_values.get(SHIPNOTE_API_KEY),
+    )
+    if shipnote_api_key is None:
+        return
+
+    provider = _resolve_shipnote_provider(process_env, file_values)
+    provider_key = SHIPNOTE_PROVIDER_MAP[provider]
+    mapped_provider_value = _first_non_empty(
+        process_env.get(provider_key),
+        process_env.get(SHIPNOTE_API_KEY),
+        file_values.get(provider_key),
+        file_values.get(SHIPNOTE_API_KEY),
+    )
+    if mapped_provider_value is not None:
+        os.environ[provider_key] = mapped_provider_value
+
+
 def load_secrets(*, required: bool = True) -> SecretsConfig:
     """Load global secrets file and inject values into process env."""
     path = default_secrets_path()
@@ -485,6 +553,9 @@ def load_secrets(*, required: bool = True) -> SecretsConfig:
     mode = stat.S_IMODE(path.stat().st_mode)
     mode_octal = oct(mode)
     values = _parse_env_file(path)
+    process_env = dict(os.environ)
+
+    _apply_shipnote_aliases(process_env, values)
 
     for key, value in values.items():
         if key and value and key not in os.environ:

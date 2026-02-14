@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from shipnote.config_loader import load_repo_config
-from shipnote.errors import ShipnoteConfigError
+from shipnote.config_loader import AXIS_MODEL_KEY, load_repo_config, load_secrets
+from shipnote.errors import ShipnoteConfigError, ShipnoteSecretsError
 
 
 def _run(repo: Path, args: list[str]) -> None:
@@ -109,6 +111,111 @@ class ConfigLoaderTests(unittest.TestCase):
 
             with self.assertRaises(ShipnoteConfigError):
                 load_repo_config(str(cfg))
+
+
+def _write_secrets(path: Path, lines: list[str]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+
+
+class SecretsAliasTests(unittest.TestCase):
+    def test_shipnote_model_env_maps_to_axis_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, ["OPENAI_API_KEY=file-key"])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(os.environ, {"SHIPNOTE_MODEL": "model-from-shipnote"}, clear=True):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv(AXIS_MODEL_KEY), "model-from-shipnote")
+
+    def test_axis_model_env_takes_precedence_over_shipnote_model(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, ["OPENAI_API_KEY=file-key"])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(
+                    os.environ,
+                    {AXIS_MODEL_KEY: "axis-model", "SHIPNOTE_MODEL": "shipnote-model"},
+                    clear=True,
+                ):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv(AXIS_MODEL_KEY), "axis-model")
+
+    def test_shipnote_api_key_defaults_to_openai(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, [])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(os.environ, {"SHIPNOTE_API_KEY": "shipnote-key"}, clear=True):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv("OPENAI_API_KEY"), "shipnote-key")
+
+    def test_shipnote_api_key_anthropic_provider_maps_to_anthropic(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, [])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(
+                    os.environ,
+                    {"SHIPNOTE_API_KEY": "shipnote-key", "SHIPNOTE_PROVIDER": "anthropic"},
+                    clear=True,
+                ):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv("ANTHROPIC_API_KEY"), "shipnote-key")
+                    self.assertIsNone(os.getenv("OPENAI_API_KEY"))
+
+    def test_explicit_provider_key_precedes_shipnote_api_alias(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, [])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(
+                    os.environ,
+                    {"OPENAI_API_KEY": "explicit-key", "SHIPNOTE_API_KEY": "shipnote-key"},
+                    clear=True,
+                ):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv("OPENAI_API_KEY"), "explicit-key")
+
+    def test_process_shipnote_api_precedes_file_provider_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, ["OPENAI_API_KEY=file-key"])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(os.environ, {"SHIPNOTE_API_KEY": "env-shipnote-key"}, clear=True):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv("OPENAI_API_KEY"), "env-shipnote-key")
+
+    def test_shipnote_aliases_from_secrets_file_are_applied(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(
+                secrets_path,
+                [
+                    "SHIPNOTE_API_KEY=file-shipnote-key",
+                    "SHIPNOTE_PROVIDER=anthropic",
+                    "SHIPNOTE_MODEL=file-shipnote-model",
+                ],
+            )
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(os.environ, {}, clear=True):
+                    load_secrets(required=True)
+                    self.assertEqual(os.getenv("ANTHROPIC_API_KEY"), "file-shipnote-key")
+                    self.assertEqual(os.getenv(AXIS_MODEL_KEY), "file-shipnote-model")
+
+    def test_invalid_shipnote_provider_raises(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            secrets_path = Path(tmp) / "secrets.env"
+            _write_secrets(secrets_path, [])
+            with patch("shipnote.config_loader.default_secrets_path", return_value=secrets_path):
+                with patch.dict(
+                    os.environ,
+                    {"SHIPNOTE_API_KEY": "shipnote-key", "SHIPNOTE_PROVIDER": "invalid"},
+                    clear=True,
+                ):
+                    with self.assertRaises(ShipnoteSecretsError):
+                        load_secrets(required=True)
 
 
 if __name__ == "__main__":
