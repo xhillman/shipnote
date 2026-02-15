@@ -6,29 +6,27 @@ import subprocess
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
+from typing import Any
 
 from .config_loader import (
-    DEFAULT_AVOID_TOPICS,
-    DEFAULT_CONTEXT_ADDITIONAL_FILES,
-    DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
-    DEFAULT_ENGAGEMENT_REMINDER,
-    DEFAULT_FOCUS_TOPICS,
-    DEFAULT_QUEUE_DIR,
-    DEFAULT_SECRET_PATTERNS,
-    DEFAULT_SKIP_FILES_ONLY,
-    DEFAULT_SKIP_MESSAGE_PATTERNS,
-    DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE,
-    DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE,
-    DEFAULT_VOICE_DESCRIPTION,
+    RepoConfig,
+    _deep_merge_dicts,
+    _default_repo_config_values,
+    _parse_yaml_subset,
+    _validate_repo_config,
+    default_global_defaults_path,
 )
 from .errors import ShipnoteConfigError
 from .git_cli import ensure_git_repo
 
-DEFAULT_CONTEXT_FILES = list(DEFAULT_CONTEXT_ADDITIONAL_FILES)
-DEFAULT_CONTEXT_CHARS = DEFAULT_CONTEXT_MAX_TOTAL_CHARS
-DEFAULT_CONTENT_FOCUS_TOPICS = list(DEFAULT_FOCUS_TOPICS)
-DEFAULT_CONTENT_AVOID_TOPICS = list(DEFAULT_AVOID_TOPICS)
-DEFAULT_CONTENT_ENGAGEMENT_REMINDER = DEFAULT_ENGAGEMENT_REMINDER
+DEFAULT_TEMPLATE_ORDER = [
+    "authority",
+    "translation",
+    "personal",
+    "growth",
+    "thread",
+    "weekly_wrapup",
+]
 
 
 @dataclass(frozen=True)
@@ -46,78 +44,111 @@ def _yaml_quote(text: str) -> str:
     return '"' + text.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _default_config_yaml(
-    *,
-    project_name: str,
-    project_description: str,
-    voice_description: str,
-    poll_interval_seconds: int,
-) -> str:
+def _repo_relative_path(repo_root: Path, value: Path) -> str:
+    return str(value.resolve().relative_to(repo_root.resolve()))
+
+
+def _ordered_template_keys(values: dict[str, Any]) -> list[str]:
+    ordered = [key for key in DEFAULT_TEMPLATE_ORDER if key in values]
+    extras = sorted([key for key in values.keys() if key not in DEFAULT_TEMPLATE_ORDER])
+    return ordered + extras
+
+
+def _config_yaml_from_repo_config(repo_cfg: RepoConfig) -> str:
+    template_categories = repo_cfg.template_preferences.content_category_default_by_template
+    thread_eligibility = repo_cfg.template_preferences.is_thread_eligible_by_template
     lines: list[str] = [
-        f"project_name: {_yaml_quote(project_name)}",
-        f"project_description: {_yaml_quote(project_description)}",
-        f"voice_description: {_yaml_quote(voice_description)}",
+        f"project_name: {_yaml_quote(repo_cfg.project_name)}",
+        f"project_description: {_yaml_quote(repo_cfg.project_description)}",
+        f"voice_description: {_yaml_quote(repo_cfg.voice_description)}",
         "",
-        f"poll_interval_seconds: {max(1, poll_interval_seconds)}",
-        "max_drafts_per_commit: 3",
-        "lookback_commits: 10",
+        f"poll_interval_seconds: {repo_cfg.poll_interval_seconds}",
+        f"max_drafts_per_commit: {repo_cfg.max_drafts_per_commit}",
+        f"lookback_commits: {repo_cfg.lookback_commits}",
         "",
-        'template_dir: ".shipnote/templates"',
-        f'queue_dir: "{DEFAULT_QUEUE_DIR}"',
-        'archive_dir: ".shipnote/archive"',
+        f'template_dir: "{_repo_relative_path(repo_cfg.repo_root, repo_cfg.template_dir)}"',
+        f'queue_dir: "{_repo_relative_path(repo_cfg.repo_root, repo_cfg.queue_dir)}"',
+        f'archive_dir: "{_repo_relative_path(repo_cfg.repo_root, repo_cfg.archive_dir)}"',
         "",
         "context:",
         "  additional_files:",
-        *[f'    - "{path}"' for path in DEFAULT_CONTEXT_FILES],
-        f"  max_total_chars: {DEFAULT_CONTEXT_CHARS}",
+        *[f'    - "{path}"' for path in repo_cfg.context.additional_files],
+        f"  max_total_chars: {repo_cfg.context.max_total_chars}",
         "",
         "content_policy:",
         "  focus_topics:",
-        *[f'    - "{topic}"' for topic in DEFAULT_CONTENT_FOCUS_TOPICS],
+        *[f'    - "{topic}"' for topic in repo_cfg.content_policy.focus_topics],
         "  avoid_topics:",
-        *[f'    - "{topic}"' for topic in DEFAULT_CONTENT_AVOID_TOPICS],
-        f"  engagement_reminder: {_yaml_quote(DEFAULT_CONTENT_ENGAGEMENT_REMINDER)}",
+        *[f'    - "{topic}"' for topic in repo_cfg.content_policy.avoid_topics],
+        f"  engagement_reminder: {_yaml_quote(repo_cfg.content_policy.engagement_reminder)}",
         "",
         "template_preferences:",
         "  content_category_default_by_template:",
     ]
     lines.extend(
         [
-            f"    {template}: {_yaml_quote(category)}"
-            for template, category in DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE.items()
+            f"    {template}: {_yaml_quote(template_categories[template])}"
+            for template in _ordered_template_keys(template_categories)
         ]
     )
     lines.extend(
         [
             "  is_thread_eligible_by_template:",
             *[
-                f"    {template}: {str(is_eligible).lower()}"
-                for template, is_eligible in DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE.items()
+                f"    {template}: {str(thread_eligibility[template]).lower()}"
+                for template in _ordered_template_keys(thread_eligibility)
             ],
             "",
             "skip_patterns:",
             "  messages:",
         ]
     )
-    lines.extend([f'    - "{pattern}"' for pattern in DEFAULT_SKIP_MESSAGE_PATTERNS])
+    lines.extend([f'    - "{pattern}"' for pattern in repo_cfg.skip_patterns.messages])
     lines.extend(
         [
             "  files_only:",
-            *[f'    - "{pattern}"' for pattern in DEFAULT_SKIP_FILES_ONLY],
-            "  min_meaningful_files: 1",
+            *[f'    - "{pattern}"' for pattern in repo_cfg.skip_patterns.files_only],
+            f"  min_meaningful_files: {repo_cfg.skip_patterns.min_meaningful_files}",
             "",
             "content_balance:",
-            "  authority: 30",
-            "  translation: 25",
-            "  personal: 25",
-            "  growth: 20",
+            f"  authority: {repo_cfg.content_balance.authority}",
+            f"  translation: {repo_cfg.content_balance.translation}",
+            f"  personal: {repo_cfg.content_balance.personal}",
+            f"  growth: {repo_cfg.content_balance.growth}",
             "",
             "secret_patterns:",
-            *[f'  - "{pattern}"' for pattern in DEFAULT_SECRET_PATTERNS],
+            *[f'  - "{pattern}"' for pattern in repo_cfg.secret_patterns],
             "",
         ]
     )
     return "\n".join(lines)
+
+
+def _load_optional_global_defaults() -> dict[str, Any]:
+    defaults_path = default_global_defaults_path()
+    if not defaults_path.exists():
+        return {}
+    if not defaults_path.is_file():
+        raise ShipnoteConfigError(f"Global defaults path is not a file: {defaults_path}")
+    parsed = _parse_yaml_subset(defaults_path)
+    if not isinstance(parsed, dict):
+        raise ShipnoteConfigError(f"Global defaults root must be an object: {defaults_path}")
+    return parsed
+
+
+def _resolve_config_path(repo: Path, config_path_override: str | Path | None) -> Path:
+    if config_path_override is None:
+        return repo / ".shipnote" / "config.yaml"
+
+    candidate = Path(config_path_override).expanduser()
+    resolved = candidate.resolve() if candidate.is_absolute() else (repo / candidate).resolve()
+    try:
+        resolved.relative_to(repo.resolve())
+    except ValueError as exc:
+        raise ShipnoteConfigError(
+            f"Config path must be inside repository root {repo}: {resolved}"
+        ) from exc
+    return resolved
 
 
 def _ensure_git_repo(repo_path: Path, *, init_git: bool) -> bool:
@@ -165,9 +196,12 @@ def bootstrap_repo(
     project_name: str | None = None,
     project_description: str | None = None,
     voice_description: str | None = None,
-    poll_interval_seconds: int = 60,
+    poll_interval_seconds: int | None = None,
     force: bool = False,
     init_git: bool = False,
+    config_path_override: str | Path | None = None,
+    config_overrides: dict[str, Any] | None = None,
+    use_global_defaults: bool = True,
 ) -> BootstrapResult:
     """Create or update Shipnote repo scaffolding in a target project."""
     repo = repo_path.expanduser().resolve()
@@ -175,29 +209,30 @@ def bootstrap_repo(
         raise ShipnoteConfigError(f"Target repo path does not exist or is not a directory: {repo}")
 
     git_initialized = _ensure_git_repo(repo, init_git=init_git)
+    config_path = _resolve_config_path(repo, config_path_override)
 
-    shipnote_dir = repo / ".shipnote"
-    templates_dir = shipnote_dir / "templates"
-    queue_dir = repo / DEFAULT_QUEUE_DIR
-    archive_dir = shipnote_dir / "archive"
-    shipnote_dir.mkdir(parents=True, exist_ok=True)
-    templates_dir.mkdir(parents=True, exist_ok=True)
-    queue_dir.mkdir(parents=True, exist_ok=True)
-    archive_dir.mkdir(parents=True, exist_ok=True)
+    raw_values = _default_repo_config_values(repo)
+    if use_global_defaults:
+        raw_values = _deep_merge_dicts(raw_values, _load_optional_global_defaults())
+    if config_overrides:
+        raw_values = _deep_merge_dicts(raw_values, config_overrides)
+    if project_name is not None:
+        raw_values["project_name"] = project_name
+    if project_description is not None:
+        raw_values["project_description"] = project_description
+    if voice_description is not None:
+        raw_values["voice_description"] = voice_description
+    if poll_interval_seconds is not None:
+        raw_values["poll_interval_seconds"] = max(1, poll_interval_seconds)
 
-    effective_project_name = project_name or repo.name
-    effective_description = (
-        project_description
-        or f"Shipnote-enabled project at {repo.name}."
-    )
-    effective_voice = voice_description or DEFAULT_VOICE_DESCRIPTION
-    config_path = shipnote_dir / "config.yaml"
-    config_content = _default_config_yaml(
-        project_name=effective_project_name,
-        project_description=effective_description,
-        voice_description=effective_voice,
-        poll_interval_seconds=poll_interval_seconds,
-    )
+    resolved_cfg = _validate_repo_config(raw_values, repo, config_path)
+    config_content = _config_yaml_from_repo_config(resolved_cfg)
+
+    resolved_cfg.shipnote_dir.mkdir(parents=True, exist_ok=True)
+    resolved_cfg.template_dir.mkdir(parents=True, exist_ok=True)
+    resolved_cfg.queue_dir.mkdir(parents=True, exist_ok=True)
+    resolved_cfg.archive_dir.mkdir(parents=True, exist_ok=True)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
 
     created_config = False
     updated_config = False
@@ -211,7 +246,7 @@ def bootstrap_repo(
 
     written_count = 0
     for bundled in _bundled_template_paths():
-        target = templates_dir / bundled.name
+        target = resolved_cfg.template_dir / bundled.name
         if target.exists() and not force:
             continue
         _write_text_atomic(target, bundled.read_text(encoding="utf-8"))

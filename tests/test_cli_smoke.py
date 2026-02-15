@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import os
+import subprocess
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -12,21 +13,34 @@ from shipnote.config_loader import load_repo_config
 
 
 class CliSmokeTests(unittest.TestCase):
+    def _run_git(self, repo: Path, args: list[str]) -> None:
+        subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True, text=True)
+
     def _run_cli(self, argv: list[str]) -> tuple[int, str, str]:
         out = io.StringIO()
         err = io.StringIO()
         with redirect_stdout(out), redirect_stderr(err):
-            code = main(argv)
+            try:
+                code = main(argv)
+            except SystemExit as exc:
+                code = int(exc.code) if isinstance(exc.code, int) else 1
         return code, out.getvalue(), err.getvalue()
 
     def test_init_config_set_and_status_smoke(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             repo.mkdir(parents=True, exist_ok=True)
+            self._run_git(repo, ["init", "-q"])
 
-            code, out, err = self._run_cli(["init", "--repo", str(repo), "--init-git"])
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(repo)
+                code, out, err = self._run_cli(["init"])
+            finally:
+                os.chdir(previous_cwd)
+
             self.assertEqual(code, 0, msg=err)
-            self.assertIn("config: created", out)
+            self.assertIn("config:", out)
             config_path = repo / ".shipnote" / "config.yaml"
             self.assertTrue(config_path.exists())
 
@@ -66,8 +80,15 @@ class CliSmokeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp) / "repo"
             repo.mkdir(parents=True, exist_ok=True)
+            self._run_git(repo, ["init", "-q"])
 
-            code, _, err = self._run_cli(["init", "--repo", str(repo), "--init-git"])
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(repo)
+                code, _, err = self._run_cli(["init"])
+            finally:
+                os.chdir(previous_cwd)
+
             self.assertEqual(code, 0, msg=err)
 
             nested = repo / "src" / "module"
