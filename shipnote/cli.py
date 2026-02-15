@@ -3,10 +3,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
 
+from .config_editor import (
+    get_config_value,
+    list_config_text,
+    set_config_value,
+    unset_config_value,
+)
 from .config_loader import AXIS_MODEL_KEY, DEFAULT_CONFIG_PATH, load_repo_config, load_secrets
 from .daemon_runtime import is_pid_alive, read_daemon_status, uptime_seconds
 from .errors import ShipnoteError
@@ -97,6 +104,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     _add_bootstrap_args(p_launch)
 
+    p_config = sub.add_parser("config", help="Read or update repo config values")
+    _add_config_arg(p_config)
+    sub_config = p_config.add_subparsers(dest="config_command", required=True)
+    sub_config.add_parser("list", help="Print full config")
+    p_config_get = sub_config.add_parser("get", help="Get a config value by dot path")
+    p_config_get.add_argument("key", help="Dot-path key (example: content_policy.focus_topics)")
+    p_config_set = sub_config.add_parser("set", help="Set a config value by dot path")
+    p_config_set.add_argument("key", help="Dot-path key (example: queue_dir)")
+    p_config_set.add_argument("value", help="Value (JSON for lists/objects, scalar otherwise)")
+    p_config_unset = sub_config.add_parser("unset", help="Unset/remove a config key by dot path")
+    p_config_unset.add_argument("key", help="Dot-path key to remove")
+
     return parser
 
 
@@ -179,6 +198,30 @@ def cmd_chat(config_path: str) -> int:
     return run_chat(config_path)
 
 
+def cmd_config(args: argparse.Namespace) -> int:
+    if args.config_command == "list":
+        print(list_config_text(args.config))
+        return 0
+    if args.config_command == "get":
+        value = get_config_value(args.config, args.key)
+        if isinstance(value, bool):
+            print("true" if value else "false")
+        elif isinstance(value, (dict, list)):
+            print(json.dumps(value, indent=2, ensure_ascii=True))
+        else:
+            print(value)
+        return 0
+    if args.config_command == "set":
+        set_config_value(args.config, args.key, args.value)
+        print(f"updated: {args.key}")
+        return 0
+    if args.config_command == "unset":
+        unset_config_value(args.config, args.key)
+        print(f"removed: {args.key}")
+        return 0
+    raise ShipnoteError(f"Unknown config subcommand: {args.config_command}")
+
+
 def _bootstrap_from_args(args: argparse.Namespace) -> Path:
     result = bootstrap_repo(
         repo_path=Path(args.repo),
@@ -233,6 +276,8 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_ask(args.config, args.question)
         if args.command == "chat":
             return cmd_chat(args.config)
+        if args.command == "config":
+            return cmd_config(args)
         if args.command == "init":
             return cmd_init(args)
         if args.command == "launch":
