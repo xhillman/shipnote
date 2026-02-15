@@ -83,7 +83,7 @@ class CliConfigTests(unittest.TestCase):
             )
 
             self.assertEqual(code, 0)
-            self.assertIn(".shipnote/queue", out)
+            self.assertIn(".shipnote/drafts", out)
 
     def test_config_get_nested_list_returns_json(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

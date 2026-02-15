@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import os
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -60,6 +61,26 @@ class CliSmokeTests(unittest.TestCase):
             self.assertEqual(code, 0, msg=err)
             self.assertIn("repo:", out)
             self.assertIn("queue_counter:", out)
+
+    def test_status_auto_discovers_repo_config_from_subdirectory(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir(parents=True, exist_ok=True)
+
+            code, _, err = self._run_cli(["init", "--repo", str(repo), "--init-git"])
+            self.assertEqual(code, 0, msg=err)
+
+            nested = repo / "src" / "module"
+            nested.mkdir(parents=True, exist_ok=True)
+            previous_cwd = Path.cwd()
+            try:
+                os.chdir(nested)
+                code, out, err = self._run_cli(["status"])
+            finally:
+                os.chdir(previous_cwd)
+
+            self.assertEqual(code, 0, msg=err)
+            self.assertIn(f"repo: {repo.resolve()}", out)
 
 
 if __name__ == "__main__":

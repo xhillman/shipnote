@@ -13,13 +13,47 @@ from .errors import ShipnoteConfigError, ShipnoteSecretsError
 
 DEFAULT_CONFIG_PATH = ".shipnote/config.yaml"
 DEFAULT_TEMPLATE_DIR = ".shipnote/templates"
-DEFAULT_QUEUE_DIR = ".shipnote/queue"
+DEFAULT_QUEUE_DIR = ".shipnote/drafts"
 DEFAULT_ARCHIVE_DIR = ".shipnote/archive"
 DEFAULT_CONTEXT_ADDITIONAL_FILES = [".shipnote/context.md"]
 DEFAULT_CONTEXT_MAX_TOTAL_CHARS = 12000
 DEFAULT_FOCUS_TOPICS = ["software engineering", "developer productivity"]
 DEFAULT_AVOID_TOPICS = ["politics", "sports", "crypto"]
 DEFAULT_ENGAGEMENT_REMINDER = "Engage in relevant community discussions before and after posting."
+DEFAULT_VOICE_DESCRIPTION = (
+    "Technical but accessible. Practical engineering tone. Direct, no fluff. "
+    "Occasional dry humor."
+)
+DEFAULT_SKIP_MESSAGE_PATTERNS = [
+    "^wip",
+    "^fix typo",
+    "^merge branch",
+    "^bump",
+    "^chore:",
+    "^Merge pull request",
+    "^Initial commit$",
+]
+DEFAULT_SKIP_FILES_ONLY = [
+    "package-lock.json",
+    "yarn.lock",
+    "*.lock",
+    ".env*",
+    ".gitignore",
+    "*.min.js",
+    "*.min.css",
+]
+DEFAULT_SECRET_PATTERNS = [
+    "(sk-[a-zA-Z0-9]{20,})",
+    "(AKIA[A-Z0-9]{16})",
+    "(ghp_[a-zA-Z0-9]{36})",
+    "(sk_live_[a-zA-Z0-9]{24,})",
+    "(pk_live_[a-zA-Z0-9]{24,})",
+    "([Bb]earer\\s+[a-zA-Z0-9._~+/-]+=*)",
+    "(xox[bpsa]-[a-zA-Z0-9-]+)",
+    "([a-zA-Z0-9+/]{40,}={0,2})",
+    "password\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
+    "secret\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
+]
 AXIS_PROVIDER_API_KEYS = ("OPENAI_API_KEY", "ANTHROPIC_API_KEY")
 AXIS_MODEL_KEY = "AXIS_DEFAULT_MODEL"
 SHIPNOTE_API_KEY = "SHIPNOTE_API_KEY"
@@ -128,6 +162,74 @@ def resolve_repo_root(config_path: Path) -> Path:
     if parent.name == ".shipnote":
         return parent.parent
     return parent
+
+
+def default_global_defaults_path() -> Path:
+    """Return global defaults path for optional user-level config."""
+    return (Path.home() / ".shipnote" / "defaults.yaml").expanduser().resolve()
+
+
+def _default_repo_config_values(repo_root: Path) -> dict[str, Any]:
+    repo_name = repo_root.name
+    return {
+        "project_name": repo_name,
+        "project_description": f"Shipnote-enabled project at {repo_name}.",
+        "voice_description": DEFAULT_VOICE_DESCRIPTION,
+        "poll_interval_seconds": 60,
+        "max_drafts_per_commit": 3,
+        "lookback_commits": 10,
+        "template_dir": DEFAULT_TEMPLATE_DIR,
+        "queue_dir": DEFAULT_QUEUE_DIR,
+        "archive_dir": DEFAULT_ARCHIVE_DIR,
+        "context": {
+            "additional_files": list(DEFAULT_CONTEXT_ADDITIONAL_FILES),
+            "max_total_chars": DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
+        },
+        "content_policy": {
+            "focus_topics": list(DEFAULT_FOCUS_TOPICS),
+            "avoid_topics": list(DEFAULT_AVOID_TOPICS),
+            "engagement_reminder": DEFAULT_ENGAGEMENT_REMINDER,
+        },
+        "skip_patterns": {
+            "messages": list(DEFAULT_SKIP_MESSAGE_PATTERNS),
+            "files_only": list(DEFAULT_SKIP_FILES_ONLY),
+            "min_meaningful_files": 1,
+        },
+        "content_balance": {
+            "authority": 30,
+            "translation": 25,
+            "personal": 25,
+            "growth": 20,
+        },
+        "secret_patterns": list(DEFAULT_SECRET_PATTERNS),
+    }
+
+
+def _deep_merge_dicts(base: dict[str, Any], overlay: dict[str, Any]) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    for key in set(base.keys()) | set(overlay.keys()):
+        base_value = base.get(key)
+        overlay_value = overlay.get(key)
+        if isinstance(base_value, dict) and isinstance(overlay_value, dict):
+            merged[key] = _deep_merge_dicts(base_value, overlay_value)
+            continue
+        if key in overlay:
+            merged[key] = overlay_value
+        else:
+            merged[key] = base_value
+    return merged
+
+
+def _load_optional_global_defaults() -> dict[str, Any]:
+    path = default_global_defaults_path()
+    if not path.exists():
+        return {}
+    if not path.is_file():
+        raise ShipnoteConfigError(f"Global defaults path is not a file: {path}")
+    parsed = _parse_yaml_subset(path)
+    if not isinstance(parsed, dict):
+        raise ShipnoteConfigError(f"Global defaults root must be an object: {path}")
+    return parsed
 
 
 def _strip_quotes(value: str) -> str:
@@ -452,9 +554,14 @@ def load_repo_config(config_path_str: str) -> RepoConfig:
     if not config_path.is_file():
         raise ShipnoteConfigError(f"Config path is not a file: {config_path}")
 
-    parsed = _parse_yaml_subset(config_path)
     repo_root = resolve_repo_root(config_path)
-    return _validate_repo_config(parsed, repo_root, config_path)
+    built_in = _default_repo_config_values(repo_root)
+    global_defaults = _load_optional_global_defaults()
+    repo_raw = _parse_yaml_subset(config_path)
+
+    merged = _deep_merge_dicts(built_in, global_defaults)
+    merged = _deep_merge_dicts(merged, repo_raw)
+    return _validate_repo_config(merged, repo_root, config_path)
 
 
 def default_secrets_path() -> Path:

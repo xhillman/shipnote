@@ -13,44 +13,15 @@ from .config_loader import (
     DEFAULT_CONTEXT_MAX_TOTAL_CHARS,
     DEFAULT_ENGAGEMENT_REMINDER,
     DEFAULT_FOCUS_TOPICS,
+    DEFAULT_QUEUE_DIR,
+    DEFAULT_SECRET_PATTERNS,
+    DEFAULT_SKIP_FILES_ONLY,
+    DEFAULT_SKIP_MESSAGE_PATTERNS,
+    DEFAULT_VOICE_DESCRIPTION,
 )
 from .errors import ShipnoteConfigError
 from .git_cli import ensure_git_repo
 
-DEFAULT_VOICE_DESCRIPTION = (
-    "Technical but accessible. Practical engineering tone. Direct, no fluff. "
-    "Occasional dry humor."
-)
-DEFAULT_SKIP_MESSAGE_PATTERNS = [
-    "^wip",
-    "^fix typo",
-    "^merge branch",
-    "^bump",
-    "^chore:",
-    "^Merge pull request",
-    "^Initial commit$",
-]
-DEFAULT_SKIP_FILES_ONLY = [
-    "package-lock.json",
-    "yarn.lock",
-    "*.lock",
-    ".env*",
-    ".gitignore",
-    "*.min.js",
-    "*.min.css",
-]
-DEFAULT_SECRET_PATTERNS = [
-    "(sk-[a-zA-Z0-9]{20,})",
-    "(AKIA[A-Z0-9]{16})",
-    "(ghp_[a-zA-Z0-9]{36})",
-    "(sk_live_[a-zA-Z0-9]{24,})",
-    "(pk_live_[a-zA-Z0-9]{24,})",
-    "([Bb]earer\\s+[a-zA-Z0-9._~+/-]+=*)",
-    "(xox[bpsa]-[a-zA-Z0-9-]+)",
-    "([a-zA-Z0-9+/]{40,}={0,2})",
-    "password\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
-    "secret\\s*[:=]\\s*[\"']?([^\"'\\s]+)",
-]
 DEFAULT_CONTEXT_FILES = list(DEFAULT_CONTEXT_ADDITIONAL_FILES)
 DEFAULT_CONTEXT_CHARS = DEFAULT_CONTEXT_MAX_TOTAL_CHARS
 DEFAULT_CONTENT_FOCUS_TOPICS = list(DEFAULT_FOCUS_TOPICS)
@@ -90,7 +61,7 @@ def _default_config_yaml(
         "lookback_commits: 10",
         "",
         'template_dir: ".shipnote/templates"',
-        'queue_dir: ".shipnote/queue"',
+        f'queue_dir: "{DEFAULT_QUEUE_DIR}"',
         'archive_dir: ".shipnote/archive"',
         "",
         "context:",
@@ -187,7 +158,7 @@ def bootstrap_repo(
 
     shipnote_dir = repo / ".shipnote"
     templates_dir = shipnote_dir / "templates"
-    queue_dir = shipnote_dir / "queue"
+    queue_dir = repo / DEFAULT_QUEUE_DIR
     archive_dir = shipnote_dir / "archive"
     shipnote_dir.mkdir(parents=True, exist_ok=True)
     templates_dir.mkdir(parents=True, exist_ok=True)

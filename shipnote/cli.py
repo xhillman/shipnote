@@ -29,9 +29,24 @@ from .template_loader import load_templates, missing_standard_templates
 def _add_config_arg(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--config",
-        default=DEFAULT_CONFIG_PATH,
-        help="Path to repo config (default: .shipnote/config.yaml)",
+        default=None,
+        help="Path to repo config (default: auto-discover .shipnote/config.yaml)",
     )
+
+
+def _discover_config_path() -> str:
+    cwd = Path.cwd().resolve()
+    for parent in (cwd, *cwd.parents):
+        candidate = parent / DEFAULT_CONFIG_PATH
+        if candidate.is_file():
+            return str(candidate)
+    return str(cwd / DEFAULT_CONFIG_PATH)
+
+
+def _resolve_config_path(config_path: str | None) -> str:
+    if isinstance(config_path, str) and config_path.strip():
+        return config_path
+    return _discover_config_path()
 
 
 def _add_bootstrap_args(parser: argparse.ArgumentParser) -> None:
@@ -260,6 +275,8 @@ def cmd_launch(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    if hasattr(args, "config"):
+        args.config = _resolve_config_path(args.config)
 
     try:
         if args.command == "start":

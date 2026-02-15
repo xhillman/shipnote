@@ -7,7 +7,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from shipnote.config_loader import AXIS_MODEL_KEY, load_repo_config, load_secrets
+from shipnote.config_loader import (
+    AXIS_MODEL_KEY,
+    default_global_defaults_path,
+    load_repo_config,
+    load_secrets,
+)
 from shipnote.errors import ShipnoteConfigError, ShipnoteSecretsError
 
 
@@ -111,6 +116,57 @@ class ConfigLoaderTests(unittest.TestCase):
 
             with self.assertRaises(ShipnoteConfigError):
                 load_repo_config(str(cfg))
+
+    def test_load_repo_config_uses_global_defaults_and_repo_precedence(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir(parents=True, exist_ok=True)
+            _run(repo, ["init", "-q"])
+
+            repo_cfg_text = _base_config_text().replace('queue_dir: ".shipnote/queue"\n', "")
+            repo_cfg_text = repo_cfg_text.replace("poll_interval_seconds: 60", "poll_interval_seconds: 45")
+            cfg = _write_config(repo, repo_cfg_text)
+
+            global_defaults = root / "defaults.yaml"
+            global_defaults.write_text(
+                "\n".join(
+                    [
+                        'queue_dir: ".shipnote/global-drafts"',
+                        "poll_interval_seconds: 120",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+            with patch("shipnote.config_loader.default_global_defaults_path", return_value=global_defaults):
+                loaded = load_repo_config(str(cfg))
+
+            self.assertEqual(loaded.poll_interval_seconds, 45)
+            self.assertEqual(loaded.queue_dir, (repo / ".shipnote/global-drafts").resolve())
+
+    def test_load_repo_config_uses_builtin_queue_dir_when_missing_everywhere(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            repo = root / "repo"
+            repo.mkdir(parents=True, exist_ok=True)
+            _run(repo, ["init", "-q"])
+
+            repo_cfg_text = _base_config_text().replace('queue_dir: ".shipnote/queue"\n', "")
+            cfg = _write_config(repo, repo_cfg_text)
+            missing_defaults_path = root / "missing-defaults.yaml"
+            self.assertFalse(missing_defaults_path.exists())
+
+            with patch("shipnote.config_loader.default_global_defaults_path", return_value=missing_defaults_path):
+                loaded = load_repo_config(str(cfg))
+
+            self.assertEqual(loaded.queue_dir, (repo / ".shipnote/drafts").resolve())
+
+    def test_default_global_defaults_path_points_to_home_dot_shipnote(self) -> None:
+        path = default_global_defaults_path()
+        self.assertEqual(path.name, "defaults.yaml")
+        self.assertEqual(path.parent.name, ".shipnote")
 
 
 def _write_secrets(path: Path, lines: list[str]) -> None:

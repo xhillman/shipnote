@@ -28,6 +28,7 @@ class ScaffoldTests(unittest.TestCase):
             config_text = result.config_path.read_text(encoding="utf-8")
             self.assertIn("poll_interval_seconds: 45", config_text)
             self.assertIn('template_dir: ".shipnote/templates"', config_text)
+            self.assertIn('queue_dir: ".shipnote/drafts"', config_text)
             self.assertNotIn("Builder-in-public", config_text)
             self.assertIn("context:", config_text)
             self.assertIn("additional_files:", config_text)
@@ -36,6 +37,7 @@ class ScaffoldTests(unittest.TestCase):
             self.assertIn("focus_topics:", config_text)
             self.assertIn("avoid_topics:", config_text)
             self.assertIn("engagement_reminder:", config_text)
+            self.assertTrue((repo / ".shipnote" / "drafts").exists())
             authority_text = (repo / ".shipnote" / "templates" / "authority.md").read_text(encoding="utf-8")
             self.assertNotIn("Building this in public", authority_text)
 
