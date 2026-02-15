@@ -20,6 +20,22 @@ DEFAULT_CONTEXT_MAX_TOTAL_CHARS = 12000
 DEFAULT_FOCUS_TOPICS = ["software engineering", "developer productivity"]
 DEFAULT_AVOID_TOPICS = ["politics", "sports", "crypto"]
 DEFAULT_ENGAGEMENT_REMINDER = "Engage in relevant community discussions before and after posting."
+DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE = {
+    "authority": "AI-Curious Builder",
+    "translation": "cross-group",
+    "personal": "Autonomy-Seeking Professional",
+    "growth": "Systems-Minded Self-Improver",
+    "thread": "AI-Curious Builder",
+    "weekly_wrapup": "cross-group",
+}
+DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE = {
+    "authority": False,
+    "translation": False,
+    "personal": False,
+    "growth": False,
+    "thread": True,
+    "weekly_wrapup": True,
+}
 DEFAULT_VOICE_DESCRIPTION = (
     "Technical but accessible. Practical engineering tone. Direct, no fluff. "
     "Occasional dry humor."
@@ -112,6 +128,14 @@ class ContentPolicyConfig:
 
 
 @dataclass(frozen=True)
+class TemplatePreferencesConfig:
+    """Template preference settings from config."""
+
+    content_category_default_by_template: dict[str, str]
+    is_thread_eligible_by_template: dict[str, bool]
+
+
+@dataclass(frozen=True)
 class RepoConfig:
     """Resolved repository-level config paths and settings."""
 
@@ -142,6 +166,12 @@ class RepoConfig:
             focus_topics=list(DEFAULT_FOCUS_TOPICS),
             avoid_topics=list(DEFAULT_AVOID_TOPICS),
             engagement_reminder=DEFAULT_ENGAGEMENT_REMINDER,
+        )
+    )
+    template_preferences: TemplatePreferencesConfig = field(
+        default_factory=lambda: TemplatePreferencesConfig(
+            content_category_default_by_template=dict(DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE),
+            is_thread_eligible_by_template=dict(DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE),
         )
     )
 
@@ -189,6 +219,10 @@ def _default_repo_config_values(repo_root: Path) -> dict[str, Any]:
             "focus_topics": list(DEFAULT_FOCUS_TOPICS),
             "avoid_topics": list(DEFAULT_AVOID_TOPICS),
             "engagement_reminder": DEFAULT_ENGAGEMENT_REMINDER,
+        },
+        "template_preferences": {
+            "content_category_default_by_template": dict(DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE),
+            "is_thread_eligible_by_template": dict(DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE),
         },
         "skip_patterns": {
             "messages": list(DEFAULT_SKIP_MESSAGE_PATTERNS),
@@ -378,6 +412,14 @@ def _as_int(raw: Any, key: str, *, minimum: int = 0, default: int | None = None)
     return value
 
 
+def _as_bool(raw: Any, key: str, *, default: bool | None = None) -> bool:
+    if raw is None and default is not None:
+        return default
+    if not isinstance(raw, bool):
+        raise ShipnoteConfigError(f"Config key '{key}' must be a boolean.")
+    return raw
+
+
 def _as_str_list(raw: Any, key: str) -> list[str]:
     if not isinstance(raw, list):
         raise ShipnoteConfigError(f"Config key '{key}' must be a list.")
@@ -401,6 +443,34 @@ def _as_non_empty_str_list(raw: Any, key: str, *, default: list[str]) -> list[st
     values = _as_str_list(raw if raw is not None else list(default), key)
     _validate_non_empty_strings(values, key)
     return values
+
+
+def _as_str_keyed_str_map(raw: Any, key: str, *, default: dict[str, str]) -> dict[str, str]:
+    values = raw if raw is not None else dict(default)
+    if not isinstance(values, dict):
+        raise ShipnoteConfigError(f"Config key '{key}' must be an object.")
+    normalized: dict[str, str] = {}
+    for item_key, item_value in values.items():
+        if not isinstance(item_key, str) or not item_key.strip():
+            raise ShipnoteConfigError(f"Config key '{key}' has an invalid template key.")
+        canonical_key = item_key.strip().lower()
+        if not isinstance(item_value, str) or not item_value.strip():
+            raise ShipnoteConfigError(f"Config key '{key}.{canonical_key}' must be a non-empty string.")
+        normalized[canonical_key] = item_value
+    return normalized
+
+
+def _as_str_keyed_bool_map(raw: Any, key: str, *, default: dict[str, bool]) -> dict[str, bool]:
+    values = raw if raw is not None else dict(default)
+    if not isinstance(values, dict):
+        raise ShipnoteConfigError(f"Config key '{key}' must be an object.")
+    normalized: dict[str, bool] = {}
+    for item_key, item_value in values.items():
+        if not isinstance(item_key, str) or not item_key.strip():
+            raise ShipnoteConfigError(f"Config key '{key}' has an invalid template key.")
+        canonical_key = item_key.strip().lower()
+        normalized[canonical_key] = _as_bool(item_value, f"{key}.{canonical_key}")
+    return normalized
 
 
 def _ensure_relative_repo_path(repo_root: Path, path_value: str, key: str) -> Path:
@@ -521,6 +591,21 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
         avoid_topics=avoid_topics,
         engagement_reminder=engagement_reminder,
     )
+    template_preferences_raw = _as_dict(raw.get("template_preferences", {}), "template_preferences")
+    content_category_default_by_template = _as_str_keyed_str_map(
+        template_preferences_raw.get("content_category_default_by_template"),
+        "template_preferences.content_category_default_by_template",
+        default=DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE,
+    )
+    is_thread_eligible_by_template = _as_str_keyed_bool_map(
+        template_preferences_raw.get("is_thread_eligible_by_template"),
+        "template_preferences.is_thread_eligible_by_template",
+        default=DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE,
+    )
+    template_preferences = TemplatePreferencesConfig(
+        content_category_default_by_template=content_category_default_by_template,
+        is_thread_eligible_by_template=is_thread_eligible_by_template,
+    )
 
     return RepoConfig(
         config_path=config_path,
@@ -540,6 +625,7 @@ def _validate_repo_config(raw: dict[str, Any], repo_root: Path, config_path: Pat
         secret_patterns=secret_patterns,
         context=context,
         content_policy=content_policy,
+        template_preferences=template_preferences,
         raw_config=raw,
     )
 

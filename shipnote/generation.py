@@ -109,7 +109,12 @@ def _extract_json_object(text: str) -> str:
     raise ValueError("No complete JSON object found in model output")
 
 
-def _validate_and_normalize_drafts(payload: dict[str, Any], max_drafts: int) -> dict[str, Any]:
+def _validate_and_normalize_drafts(
+    payload: dict[str, Any],
+    max_drafts: int,
+    *,
+    is_thread_eligible_by_template: dict[str, bool],
+) -> dict[str, Any]:
     drafts_raw = payload.get("drafts", [])
     if not isinstance(drafts_raw, list):
         raise ValueError("`drafts` must be a list")
@@ -119,6 +124,7 @@ def _validate_and_normalize_drafts(payload: dict[str, Any], max_drafts: int) -> 
         if not isinstance(item, dict):
             continue
         template_type = str(item.get("template_type", "")).strip()
+        template_key = template_type.lower()
         content_category = str(item.get("content_category", "")).strip()
         suggested_time = str(item.get("suggested_time", "")).strip()
         target_signals = item.get("target_signals", [])
@@ -135,6 +141,8 @@ def _validate_and_normalize_drafts(payload: dict[str, Any], max_drafts: int) -> 
             continue
         filtered_signals = [s for s in target_signals if isinstance(s, str) and s in ALLOWED_SIGNALS]
         if len(filtered_signals) < 2:
+            continue
+        if is_thread and not bool(is_thread_eligible_by_template.get(template_key, False)):
             continue
 
         normalized.append(
@@ -201,4 +209,8 @@ def generate_drafts(
     payload = json.loads(json_text)
     if not isinstance(payload, dict):
         raise ValueError("generation output root must be an object")
-    return _validate_and_normalize_drafts(payload, max_drafts)
+    return _validate_and_normalize_drafts(
+        payload,
+        max_drafts,
+        is_thread_eligible_by_template=repo_cfg.template_preferences.is_thread_eligible_by_template,
+    )

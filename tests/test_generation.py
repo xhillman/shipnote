@@ -11,12 +11,31 @@ from shipnote.config_loader import (
     ContextConfig,
     RepoConfig,
     SkipPatternsConfig,
+    TemplatePreferencesConfig,
 )
 from shipnote.generation import generate_drafts
 
 
-def _repo_cfg() -> RepoConfig:
+def _repo_cfg(*, template_preferences: TemplatePreferencesConfig | None = None) -> RepoConfig:
     root = Path("/tmp/shipnote")
+    prefs = template_preferences or TemplatePreferencesConfig(
+        content_category_default_by_template={
+            "authority": "AI-Curious Builder",
+            "translation": "cross-group",
+            "personal": "Autonomy-Seeking Professional",
+            "growth": "Systems-Minded Self-Improver",
+            "thread": "AI-Curious Builder",
+            "weekly_wrapup": "cross-group",
+        },
+        is_thread_eligible_by_template={
+            "authority": False,
+            "translation": False,
+            "personal": False,
+            "growth": False,
+            "thread": True,
+            "weekly_wrapup": True,
+        },
+    )
     return RepoConfig(
         config_path=root / ".shipnote" / "config.yaml",
         repo_root=root,
@@ -40,6 +59,7 @@ def _repo_cfg() -> RepoConfig:
             avoid_topics=["politics", "sports"],
             engagement_reminder="Engage in relevant places.",
         ),
+        template_preferences=prefs,
     )
 
 
@@ -82,6 +102,91 @@ class GenerationTests(unittest.TestCase):
         self.assertEqual(len(result["drafts"]), 1)
         mock_build_prompt.assert_called_once_with(repo_cfg)
         self.assertEqual(mock_agent_cls.call_args.kwargs["system"], "SYSTEM_FROM_BUILDER")
+
+    @patch("shipnote.generation.Timeouts")
+    @patch("shipnote.generation.RetryPolicy")
+    @patch("shipnote.generation.Agent")
+    @patch("shipnote.generation.build_generation_system_prompt")
+    def test_generate_drafts_filters_ineligible_thread_drafts(
+        self,
+        mock_build_prompt: MagicMock,
+        mock_agent_cls: MagicMock,
+        mock_retry_policy: MagicMock,
+        mock_timeouts: MagicMock,
+    ) -> None:
+        repo_cfg = _repo_cfg(
+            template_preferences=TemplatePreferencesConfig(
+                content_category_default_by_template={"authority": "AI-Curious Builder"},
+                is_thread_eligible_by_template={"authority": False},
+            )
+        )
+        mock_build_prompt.return_value = "SYSTEM_FROM_BUILDER"
+        mock_retry_policy.return_value = object()
+        mock_timeouts.return_value = object()
+
+        agent = MagicMock()
+        agent.run.return_value = SimpleNamespace(
+            success=True,
+            output_raw=(
+                '{"drafts":[{"template_type":"authority","content_category":"AI-Curious Builder",'
+                '"suggested_time":"weekday_morning","target_signals":["dwell_time","profile_click"],'
+                '"is_thread":true,"content":"A thread that should be dropped"}]}'
+            ),
+            error=None,
+        )
+        mock_agent_cls.return_value = agent
+
+        result = generate_drafts(
+            repo_cfg=repo_cfg,
+            context={},
+            templates={},
+            max_drafts=1,
+        )
+
+        self.assertEqual(result["drafts"], [])
+
+    @patch("shipnote.generation.Timeouts")
+    @patch("shipnote.generation.RetryPolicy")
+    @patch("shipnote.generation.Agent")
+    @patch("shipnote.generation.build_generation_system_prompt")
+    def test_generate_drafts_keeps_eligible_thread_drafts(
+        self,
+        mock_build_prompt: MagicMock,
+        mock_agent_cls: MagicMock,
+        mock_retry_policy: MagicMock,
+        mock_timeouts: MagicMock,
+    ) -> None:
+        repo_cfg = _repo_cfg(
+            template_preferences=TemplatePreferencesConfig(
+                content_category_default_by_template={"thread": "AI-Curious Builder"},
+                is_thread_eligible_by_template={"thread": True},
+            )
+        )
+        mock_build_prompt.return_value = "SYSTEM_FROM_BUILDER"
+        mock_retry_policy.return_value = object()
+        mock_timeouts.return_value = object()
+
+        agent = MagicMock()
+        agent.run.return_value = SimpleNamespace(
+            success=True,
+            output_raw=(
+                '{"drafts":[{"template_type":"thread","content_category":"AI-Curious Builder",'
+                '"suggested_time":"weekday_morning","target_signals":["dwell_time","profile_click"],'
+                '"is_thread":true,"content":"A thread that should remain"}]}'
+            ),
+            error=None,
+        )
+        mock_agent_cls.return_value = agent
+
+        result = generate_drafts(
+            repo_cfg=repo_cfg,
+            context={},
+            templates={},
+            max_drafts=1,
+        )
+
+        self.assertEqual(len(result["drafts"]), 1)
+        self.assertTrue(result["drafts"][0]["is_thread"])
 
 
 if __name__ == "__main__":

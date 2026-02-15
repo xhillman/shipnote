@@ -163,6 +163,55 @@ class ConfigLoaderTests(unittest.TestCase):
 
             self.assertEqual(loaded.queue_dir, (repo / ".shipnote/drafts").resolve())
 
+    def test_load_repo_config_parses_template_preferences(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir(parents=True, exist_ok=True)
+            _run(repo, ["init", "-q"])
+            cfg = _write_config(
+                repo,
+                _base_config_text()
+                + "\n\n"
+                + "\n".join(
+                    [
+                        "template_preferences:",
+                        "  content_category_default_by_template:",
+                        '    authority: "cross-group"',
+                        "  is_thread_eligible_by_template:",
+                        "    authority: true",
+                    ]
+                ),
+            )
+
+            loaded = load_repo_config(str(cfg))
+
+            self.assertEqual(
+                loaded.template_preferences.content_category_default_by_template["authority"],
+                "cross-group",
+            )
+            self.assertTrue(loaded.template_preferences.is_thread_eligible_by_template["authority"])
+
+    def test_load_repo_config_rejects_non_boolean_thread_eligibility_preference(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "repo"
+            repo.mkdir(parents=True, exist_ok=True)
+            _run(repo, ["init", "-q"])
+            cfg = _write_config(
+                repo,
+                _base_config_text()
+                + "\n\n"
+                + "\n".join(
+                    [
+                        "template_preferences:",
+                        "  is_thread_eligible_by_template:",
+                        '    authority: "yes"',
+                    ]
+                ),
+            )
+
+            with self.assertRaises(ShipnoteConfigError):
+                load_repo_config(str(cfg))
+
     def test_default_global_defaults_path_points_to_home_dot_shipnote(self) -> None:
         path = default_global_defaults_path()
         self.assertEqual(path.name, "defaults.yaml")

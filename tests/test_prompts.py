@@ -9,6 +9,7 @@ from shipnote.config_loader import (
     ContextConfig,
     RepoConfig,
     SkipPatternsConfig,
+    TemplatePreferencesConfig,
 )
 from shipnote.prompts import build_generation_system_prompt
 
@@ -39,6 +40,16 @@ class PromptTests(unittest.TestCase):
                 avoid_topics=["politics", "sports"],
                 engagement_reminder="Engage where your users already discuss this topic.",
             ),
+            template_preferences=TemplatePreferencesConfig(
+                content_category_default_by_template={
+                    "authority": "AI-Curious Builder",
+                    "weekly_wrapup": "cross-group",
+                },
+                is_thread_eligible_by_template={
+                    "authority": False,
+                    "weekly_wrapup": True,
+                },
+            ),
         )
 
         prompt = build_generation_system_prompt(cfg)
@@ -47,6 +58,9 @@ class PromptTests(unittest.TestCase):
         self.assertIn("politics, sports", prompt)
         self.assertIn("Single tweets must remain under 280 chars", prompt)
         self.assertIn("Threads max 7 tweets", prompt)
+        self.assertIn("Template preferences:", prompt)
+        self.assertIn("authority -> AI-Curious Builder", prompt)
+        self.assertIn("weekly_wrapup -> true", prompt)
 
 
 if __name__ == "__main__":

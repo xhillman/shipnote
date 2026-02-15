@@ -17,6 +17,8 @@ from .config_loader import (
     DEFAULT_SECRET_PATTERNS,
     DEFAULT_SKIP_FILES_ONLY,
     DEFAULT_SKIP_MESSAGE_PATTERNS,
+    DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE,
+    DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE,
     DEFAULT_VOICE_DESCRIPTION,
 )
 from .errors import ShipnoteConfigError
@@ -76,9 +78,27 @@ def _default_config_yaml(
         *[f'    - "{topic}"' for topic in DEFAULT_CONTENT_AVOID_TOPICS],
         f"  engagement_reminder: {_yaml_quote(DEFAULT_CONTENT_ENGAGEMENT_REMINDER)}",
         "",
-        "skip_patterns:",
-        "  messages:",
+        "template_preferences:",
+        "  content_category_default_by_template:",
     ]
+    lines.extend(
+        [
+            f"    {template}: {_yaml_quote(category)}"
+            for template, category in DEFAULT_TEMPLATE_CONTENT_CATEGORY_BY_TEMPLATE.items()
+        ]
+    )
+    lines.extend(
+        [
+            "  is_thread_eligible_by_template:",
+            *[
+                f"    {template}: {str(is_eligible).lower()}"
+                for template, is_eligible in DEFAULT_TEMPLATE_THREAD_ELIGIBLE_BY_TEMPLATE.items()
+            ],
+            "",
+            "skip_patterns:",
+            "  messages:",
+        ]
+    )
     lines.extend([f'    - "{pattern}"' for pattern in DEFAULT_SKIP_MESSAGE_PATTERNS])
     lines.extend(
         [
