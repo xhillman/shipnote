@@ -1,6 +1,6 @@
 # Shipnote
 
-Shipnote turns meaningful git commits into queued, reviewable build-in-public draft posts.
+Shipnote turns meaningful git commits into queued, reviewable draft posts.
 
 It runs locally, monitors one repository at a time, and writes markdown drafts to:
 

@@ -18,7 +18,7 @@ from .errors import ShipnoteConfigError
 from .git_cli import ensure_git_repo
 
 DEFAULT_VOICE_DESCRIPTION = (
-    "Technical but accessible. Builder-in-public tone. Direct, no fluff. "
+    "Technical but accessible. Practical engineering tone. Direct, no fluff. "
     "Occasional dry humor."
 )
 DEFAULT_SKIP_MESSAGE_PATTERNS = [

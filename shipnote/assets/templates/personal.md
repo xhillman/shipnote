@@ -33,7 +33,7 @@ Progress got faster when I stopped pretending every attempt was clean.
 Can anyone relate?
 
 ### Example 2
-Tried to make my agent "more autonomous" this week.
+Tried to make my workflow "more autonomous" this week.
 
 It got less predictable.
 

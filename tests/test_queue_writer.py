@@ -4,13 +4,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from shipnote.config_loader import ContentBalanceConfig, RepoConfig, SkipPatternsConfig
+from shipnote.config_loader import ContentBalanceConfig, ContentPolicyConfig, RepoConfig, SkipPatternsConfig
 from shipnote.git_cli import CommitInfo
 from shipnote.queue_writer import write_drafts
 
 
 class QueueWriterTests(unittest.TestCase):
-    def _repo_cfg(self, root: Path) -> RepoConfig:
+    def _repo_cfg(self, root: Path, *, engagement_reminder: str = "Team-engagement reminder") -> RepoConfig:
         shipnote_dir = root / ".shipnote"
         return RepoConfig(
             config_path=shipnote_dir / "config.yaml",
@@ -28,6 +28,11 @@ class QueueWriterTests(unittest.TestCase):
             skip_patterns=SkipPatternsConfig(messages=[], files_only=[], min_meaningful_files=1),
             content_balance=ContentBalanceConfig(authority=30, translation=25, personal=25, growth=20),
             secret_patterns=[],
+            content_policy=ContentPolicyConfig(
+                focus_topics=["software engineering"],
+                avoid_topics=["politics", "sports", "crypto"],
+                engagement_reminder=engagement_reminder,
+            ),
             raw_config={},
         )
 
@@ -75,10 +80,12 @@ class QueueWriterTests(unittest.TestCase):
             content = paths[0].read_text(encoding="utf-8")
             self.assertIn('commit_message: "Add \\"important\\" thing"', content)
             self.assertIn("engagement_reminder:", content)
+            self.assertIn("Team-engagement reminder", content)
+            self.assertIn("availability_reminder:", content)
+            self.assertNotIn("niche_reminder:", content)
             self.assertEqual(state["queue_counter"], 1)
             self.assertEqual(state["content_ledger"]["category_counts_this_week"]["authority"], 1)
 
 
 if __name__ == "__main__":
     unittest.main()
-

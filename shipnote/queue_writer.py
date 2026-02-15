@@ -10,11 +10,8 @@ from .config_loader import RepoConfig
 from .git_cli import CommitInfo
 from .state_manager import utc_now
 
-ENGAGEMENT_REMINDER = "Be available for 60 min after posting. Reply to every reply substantively."
+AVAILABILITY_REMINDER = "Be available for 60 min after posting. Reply to every reply substantively."
 SPACING_REMINDER = "Space 2-3 hours from last post. Max 2-4 posts/day."
-NICHE_REMINDER = (
-    "Engage with 10-20 niche posts (AI agents, building in public, indie hacking) before/after posting."
-)
 
 
 def _yaml_quote(value: str) -> str:
@@ -58,6 +55,7 @@ def _render_frontmatter(
     draft: dict[str, Any],
     commit: CommitInfo,
     project_name: str,
+    engagement_reminder: str,
     generated_at: str,
 ) -> str:
     signals = ", ".join(str(s) for s in draft.get("target_signals", []))
@@ -73,9 +71,9 @@ def _render_frontmatter(
         f"commit_message: {_yaml_quote(commit.message)}",
         f"generated_at: {_yaml_quote(generated_at)}",
         f"project: {project_name}",
-        f"engagement_reminder: {_yaml_quote(ENGAGEMENT_REMINDER)}",
+        f"engagement_reminder: {_yaml_quote(engagement_reminder)}",
+        f"availability_reminder: {_yaml_quote(AVAILABILITY_REMINDER)}",
         f"spacing_reminder: {_yaml_quote(SPACING_REMINDER)}",
-        f"niche_reminder: {_yaml_quote(NICHE_REMINDER)}",
     ]
     if bool(draft.get("is_thread", False)):
         lines.append(f"tweet_count: {_thread_tweet_count(str(draft.get('content', '')))}")
@@ -111,6 +109,7 @@ def write_drafts(
             draft=draft,
             commit=commit,
             project_name=repo_cfg.project_name,
+            engagement_reminder=repo_cfg.content_policy.engagement_reminder,
             generated_at=generated_at,
         )
         body = str(draft.get("content", "")).strip()

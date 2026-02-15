@@ -18,7 +18,7 @@ is_thread_eligible: true
 ## Example Posts
 
 ### Example 1
-1/5 Most agent failures are architecture failures, not model failures.
+1/5 Most production failures are architecture failures, not model failures.
 
 2/5 If failure paths are unclear, "better prompts" won't save you.
 
@@ -38,7 +38,7 @@ is_thread_eligible: true
 4/4 Reliability starts with explicit failure contracts. What would you add?
 
 ### Example 3
-1/6 A practical way to scope agent autonomy:
+1/6 A practical way to scope workflow autonomy:
 
 2/6 List allowed actions.
 

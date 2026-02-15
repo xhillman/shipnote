@@ -20,7 +20,7 @@ is_thread_eligible: false
 ## Example Posts
 
 ### Example 1
-Here's how agent memory actually works (simplified):
+Here's how event pipelines actually work (simplified):
 
 1. Capture only useful events.
 2. Store with context, not raw noise.
@@ -31,7 +31,7 @@ Memory is less about storage and more about selective recall.
 Bookmark this if useful.
 
 ### Example 2
-Here's a fast way to evaluate new agent tools:
+Here's a fast way to evaluate new automation tools:
 
 1. Coverage
 2. Overlap
@@ -40,7 +40,7 @@ Here's a fast way to evaluate new agent tools:
 
 If any score is weak, don't ship it.
 
-Your agent needs fewer tools than you think.
+Your workflow needs fewer tools than you think.
 
 ### Example 3
 Retries are not reliability.

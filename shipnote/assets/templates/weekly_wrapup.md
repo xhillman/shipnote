@@ -29,7 +29,7 @@ Shipped: stronger state recovery and safer queue writes.
 4/4 If you ship weekly, what's your review ritual?
 
 ### Example 2
-1/5 This week in public:
+1/5 This week's build log:
 
 2/5 Built: commit filtering + secret redaction pipeline.
 

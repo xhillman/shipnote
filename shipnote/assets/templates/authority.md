@@ -13,7 +13,7 @@ structural_rules:
   - "Blank line"
   - "Payoff that ties it together"
   - "Blank line"
-  - "Soft CTA: Building [project] in public. Follow for more."
+  - "Soft CTA: Sharing lessons from [project]. Follow for more."
 signal_strategy: "Hook drives dwell. Tactical points drive dwell and copy-link saves. Credibility drives profile clicks."
 max_length: 280
 is_thread_eligible: false
@@ -22,18 +22,18 @@ is_thread_eligible: false
 ## Example Posts
 
 ### Example 1
-Most agent builders optimize tool count.
+Most engineering teams optimize tool count.
 
 Wrong metric.
 
 Optimize debug path length: log clarity, failure replay, and recovery speed.
 
-Smarter agents help less than diagnosable agents.
+Smarter systems help less than diagnosable systems.
 
-Building this in public. Follow for more.
+Sharing lessons from this build. Follow for more.
 
 ### Example 2
-The hard part of AI agents isn't reasoning.
+The hard part of complex automation isn't reasoning.
 
 It's deterministic fallback behavior.
 

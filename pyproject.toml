@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "shipnote"
 version = "0.1.0"
-description = "Generate build-in-public draft posts from git commits using axis-core"
+description = "Generate draft posts from git commits using axis-core"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,7 +14,7 @@ dependencies = [
 authors = [
   { name = "Xavier Hillman" }
 ]
-keywords = ["git", "ai", "automation", "content", "build-in-public"]
+keywords = ["git", "ai", "automation", "content", "engineering"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",

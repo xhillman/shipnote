@@ -27,7 +27,7 @@ Usually it means deciding faster.
 If your architecture requires six debates per feature, velocity is already gone.
 
 ### Example 2
-Everyone says add more agent tools.
+Everyone says add more integrations.
 
 Reality: remove 30% of them.
 
